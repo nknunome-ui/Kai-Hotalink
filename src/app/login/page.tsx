@@ -19,8 +19,16 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(clientAuth(), email.trim(), password);
       router.replace("/residents");
-    } catch {
-      setError("メールアドレスかパスワードが違います");
+    } catch (err) {
+      const code = (err as { code?: string }).code ?? "";
+      const messages: Record<string, string> = {
+        "auth/operation-not-allowed":
+          "Firebase でメール/パスワードのログインが有効になっていません（Authentication → ログイン方法）",
+        "auth/too-many-requests": "ログインの試行が多すぎます。しばらく待ってからもう一度お試しください",
+        "auth/network-request-failed": "通信できませんでした。ネットワークを確認してください",
+        "auth/invalid-api-key": ".env.local の NEXT_PUBLIC_FIREBASE_API_KEY が正しくありません",
+      };
+      setError(messages[code] ?? "メールアドレスかパスワードが違います（アカウントが未作成の可能性もあります）");
       setBusy(false);
     }
   }
