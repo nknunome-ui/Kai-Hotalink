@@ -48,6 +48,8 @@
 
 ### 2. ローカルで動かす
 
+Node.js 22 以上が必要です（`node -v` で確認。古い場合は [nodejs.org](https://nodejs.org/ja) から LTS 版を入れる）。
+
 ```bash
 npm install
 cp .env.example .env.local   # 1 で控えた値を入れる
