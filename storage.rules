@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// 資料ファイルはブラウザから直接アップロードする。
+// 自分の施設（ログイン情報のカスタムクレーム facilityId）の下にだけ、
+// PDF・画像・テキストの 20MB 以下のファイルを書き込める。
+// 読み出し・削除はサーバーだけが行う。
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /facilities/{facilityId}/residents/{residentId}/{fileName} {
+      allow create: if request.auth != null
+        && request.auth.token.facilityId == facilityId
+        && request.resource.size < 20 * 1024 * 1024
+        && (request.resource.contentType == 'application/pdf'
+            || request.resource.contentType.matches('image/(jpeg|png|webp)')
+            || request.resource.contentType == 'text/plain');
+      allow read, update, delete: if false;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
