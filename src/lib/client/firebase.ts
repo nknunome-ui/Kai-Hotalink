@@ -17,7 +17,16 @@ let auth: Auth | null = null;
 let storage: FirebaseStorage | null = null;
 
 function app() {
-  return getApps().length ? getApp() : initializeApp(config);
+  if (getApps().length) return getApp();
+  const missing = Object.entries(config)
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
+  if (missing.length) {
+    throw new Error(
+      `.env.local の Firebase 設定が空です（${missing.join(", ")}）。値を入れて保存し、npm run dev を再起動してください。`,
+    );
+  }
+  return initializeApp(config);
 }
 
 export function clientAuth(): Auth {
