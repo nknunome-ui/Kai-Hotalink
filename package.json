@@ -33,6 +33,11 @@
     "vitest": "^5.0.5"
   },
   "engines": {
-    "node": "22.x"
+    "node": ">=22"
+  },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "^5.10.0"
+    }
   }
 }

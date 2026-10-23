@@ -48,7 +48,7 @@
 
 ### 2. ローカルで動かす
 
-Node.js 22 が必要です（`node -v` で確認。古い場合は [nodejs.org](https://nodejs.org/ja) から LTS 版を入れる）。
+Node.js 22 以上が必要です（`node -v` で確認。古い場合は [nodejs.org](https://nodejs.org/ja) から LTS 版を入れる）。
 
 ```bash
 npm install
@@ -71,7 +71,7 @@ npm run dev                   # http://localhost:3000
 3. デプロイ後、`NEXT_PUBLIC_APP_URL` に本番の URL を入れて再デプロイ
 4. Firebase コンソール → Authentication → 設定 → **承認済みドメイン**に Vercel のドメインを追加
 
-関数のリージョンは `vercel.json` で東京（`hnd1`）にしています。Node.js は `package.json` の `engines` で 22.x に固定しています（古い Node.js だと firebase-admin の読み込みで `ERR_REQUIRE_ESM` になり、API が 500 を返します）。
+関数のリージョンは `vercel.json` で東京（`hnd1`）にしています。Vercel の関数では ESM 専用パッケージを `require()` できないため、`package.json` の `overrides` で firebase-admin が使う jwks-rsa の jose を CommonJS 版（v5）に固定しています（外すと `ERR_REQUIRE_ESM` で API がすべて 500 になります）。
 
 ## 開発
 
