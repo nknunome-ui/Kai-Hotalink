@@ -71,7 +71,7 @@ npm run dev                   # http://localhost:3000
 3. デプロイ後、`NEXT_PUBLIC_APP_URL` に本番の URL を入れて再デプロイ
 4. Firebase コンソール → Authentication → 設定 → **承認済みドメイン**に Vercel のドメインを追加
 
-関数のリージョンは `vercel.json` で東京（`hnd1`）にしています。
+関数のリージョンは `vercel.json` で東京（`hnd1`）にしています。Vercel の関数では ESM 専用パッケージを `require()` できないため、`package.json` の `overrides` で firebase-admin が使う jwks-rsa の jose を CommonJS 版（v5）に固定しています（外すと `ERR_REQUIRE_ESM` で API がすべて 500 になります）。
 
 ## 開発
 
