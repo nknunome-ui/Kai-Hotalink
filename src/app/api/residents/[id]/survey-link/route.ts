@@ -10,7 +10,9 @@ export const POST = handle(async (req: Request, ctx: RouteContext<"/api/resident
   const resident = await getResident(staff.facilityId, id);
   const questionIds = buildSurvey(resident.profile).map((q) => q.id);
   const token = await issueSurveyToken(staff.facilityId, id, questionIds);
-  const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+  // .env.example のサンプル値（your-app.vercel.app）のままなら使わず、アクセス中の URL にする
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  const origin = configured && !configured.includes("your-app.") ? configured : new URL(req.url).origin;
   return Response.json({
     url: `${origin}/survey/${token}`,
     resident: await getResident(staff.facilityId, id),
