@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { normalizeProfile } from "@/lib/domain/profile";
-import { emptyProfile, type ResidentProfile } from "@/lib/domain/types";
+import { normalizeEvidence, normalizeProfile } from "@/lib/domain/profile";
+import { PROFILE_FIELDS, emptyProfile, type Evidence, type ProfileField, type ResidentProfile } from "@/lib/domain/types";
 
 // Claude は「資料を読んで項目を拾う」「自由記述を要約する」だけを担当する。
 // 点数付けと判定は lib/domain/judge.ts のルールで行う。
@@ -24,6 +24,8 @@ export interface ExtractionResult {
   profile: ResidentProfile;
   /** 資料から判断できなかった項目・確認が必要な点 */
   uncertain: string[];
+  /** 項目ごとの根拠（資料からの抜き書き） */
+  evidence: Evidence[];
   model: string;
 }
 
@@ -32,7 +34,7 @@ const PROFILE_TOOL: Anthropic.Tool = {
   description: "介護資料から読み取った入居希望者の状態を記録する",
   input_schema: {
     type: "object",
-    required: ["careLevel", "medical", "physical", "cognition", "summary", "uncertain"],
+    required: ["careLevel", "medical", "physical", "cognition", "summary", "uncertain", "evidence"],
     properties: {
       age: { type: ["integer", "null"], description: "年齢。不明なら null" },
       careLevel: {
@@ -92,6 +94,20 @@ const PROFILE_TOOL: Anthropic.Tool = {
         items: { type: "string" },
         description: "資料から判断できなかった項目や、施設が面談で確認すべき点（日本語、各1文）",
       },
+      evidence: {
+        type: "array",
+        description:
+          "値を決めた根拠。資料に記載があった項目ごとに1件。記載がなく既定値（なし・0・不要など）にした項目は含めない",
+        items: {
+          type: "object",
+          required: ["field", "quote", "source"],
+          properties: {
+            field: { type: "string", enum: [...PROFILE_FIELDS], description: "項目名（suction などは medical の中の項目）" },
+            quote: { type: "string", description: "根拠になった資料の記述を、原文のまま80字以内で抜き書き" },
+            source: { type: "string", description: "資料のファイル名。スタッフの追記なら「スタッフの追記」" },
+          },
+        },
+      },
     },
   },
 };
@@ -105,6 +121,7 @@ function toBlocks(files: SourceFile[]): Anthropic.ContentBlockParam[] {
     if (f.contentType === "application/pdf") {
       blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data }, title: f.name });
     } else if ((IMAGE_TYPES as readonly string[]).includes(f.contentType)) {
+      blocks.push({ type: "text", text: `【資料：${f.name}】` });
       blocks.push({
         type: "image",
         source: { type: "base64", media_type: f.contentType as (typeof IMAGE_TYPES)[number], data },
@@ -121,9 +138,9 @@ export async function extractProfile(files: SourceFile[], staffNotes: string): P
 
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 2000,
+    max_tokens: 4000,
     system:
-      "あなたは介護施設の入居相談員を補助するアシスタントです。主治医意見書・ケアプラン・看護サマリーなどの資料から、入居希望者の状態を項目ごとに正確に読み取ってください。資料に書かれていないことは推測せず、該当なし（false / none / 0）にしたうえで、確認が必要なら uncertain に書いてください。結果は必ず record_resident_profile ツールで記録してください。",
+      "あなたは介護施設の入居相談員を補助するアシスタントです。主治医意見書・ケアプラン・看護サマリーなどの資料から、入居希望者の状態を項目ごとに正確に読み取ってください。資料に書かれていないことは推測せず、該当なし（false / none / 0）にしたうえで、確認が必要なら uncertain に書いてください。値を決めた項目には、根拠になった記述を原文のまま evidence に抜き書きしてください（要約や言い換えはしない）。結果は必ず record_resident_profile ツールで記録してください。",
     tools: [PROFILE_TOOL],
     tool_choice: { type: "tool", name: PROFILE_TOOL.name },
     messages: [
@@ -146,7 +163,7 @@ export async function extractProfile(files: SourceFile[], staffNotes: string): P
   const uncertain = Array.isArray(input.uncertain)
     ? input.uncertain.filter((x): x is string => typeof x === "string").slice(0, 20)
     : [];
-  return { profile: normalizeProfile(input), uncertain, model: MODEL };
+  return { profile: normalizeProfile(input), uncertain, evidence: normalizeEvidence(input.evidence), model: MODEL };
 }
 
 /** 家族の自由記述（過去に困ったこと）を、施設が読める短い要約にする */
@@ -169,6 +186,14 @@ export async function summarizePastExperience(text: string): Promise<string> {
 
 function mockExtract(notes: string): ExtractionResult {
   const p = emptyProfile();
+  const evidence: Evidence[] = [];
+  // 見つけたキーワードを含む一文を根拠として抜き書きする
+  const sentences = notes.split(/(?<=[。\n])/).map((x) => x.trim()).filter(Boolean);
+  const cite = (field: ProfileField, word: string) => {
+    const quote = sentences.find((x) => x.includes(word));
+    if (!quote || evidence.some((e) => e.field === field)) return;
+    evidence.push({ field, quote, source: "スタッフの追記" });
+  };
   const has = (...words: string[]) => words.some((w) => notes.includes(w));
   const care = notes.match(/要介護\s*([1-5１-５])/);
   if (care) p.careLevel = (Number(care[1].replace(/[１-５]/, (d) => String("１２３４５".indexOf(d) + 1))) + 2) as ResidentProfile["careLevel"];
@@ -193,10 +218,30 @@ function mockExtract(notes: string): ExtractionResult {
   p.cognition.aggression = has("暴言", "暴力");
   p.cognition.careRefusal = has("拒否");
   p.cognition.nightDisturbance = has("昼夜逆転", "不穏");
+  const KEYWORDS: [ProfileField, string[]][] = [
+    ["careLevel", ["要介護", "要支援"]],
+    ["suction", ["吸引"]],
+    ["gastrostomy", ["胃ろう", "胃瘻", "経管"]],
+    ["oxygen", ["酸素"]],
+    ["insulin", ["インスリン"]],
+    ["dialysis", ["透析"]],
+    ["urinaryCatheter", ["カテーテル", "バルーン"]],
+    ["tracheostomy", ["気管切開"]],
+    ["pressureUlcer", ["褥瘡"]],
+    ["mobility", ["寝たきり", "全介助", "一部介助", "見守り"]],
+    ["fallsLastYear", ["転倒"]],
+    ["dementiaLevel", ["認知症"]],
+    ["wandering", ["徘徊"]],
+    ["aggression", ["暴言", "暴力"]],
+    ["careRefusal", ["拒否"]],
+    ["nightDisturbance", ["昼夜逆転", "不穏"]],
+  ];
+  for (const [field, words] of KEYWORDS) for (const w of words) cite(field, w);
   p.summary = "（AI 未設定のためダミーの読み取りです。スタッフの追記からキーワードで推定しました）";
   return {
     profile: p,
     uncertain: ["ANTHROPIC_API_KEY を設定すると、アップロードした資料を Claude が読み取ります"],
+    evidence,
     model: "mock",
   };
 }

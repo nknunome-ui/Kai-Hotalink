@@ -34,7 +34,13 @@ export const POST = handle(async (req: Request, ctx: RouteContext<"/api/resident
   const updated = await updateResident(staff.facilityId, id, {
     profile: result.profile,
     profileConfirmed: false,
-    extraction: { at: new Date().toISOString(), model: result.model, uncertain: result.uncertain },
+    extraction: {
+      at: new Date().toISOString(),
+      model: result.model,
+      uncertain: result.uncertain,
+      evidence: result.evidence,
+      profile: result.profile,
+    },
   });
   return Response.json({ resident: updated });
 });

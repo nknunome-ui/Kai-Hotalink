@@ -30,13 +30,27 @@ export function Button({
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({
+  label,
+  hint,
+  note,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  /** 入力欄の下に出す補足（AI の根拠など） */
+  note?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-[13px] font-semibold text-ink-soft">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-[12px] text-mute">{hint}</span>}
-    </label>
+    <div>
+      <label className="block">
+        <span className="mb-1 block text-[13px] font-semibold text-ink-soft">{label}</span>
+        {children}
+        {hint && <span className="mt-1 block text-[12px] text-mute">{hint}</span>}
+      </label>
+      {note}
+    </div>
   );
 }
 
@@ -59,45 +73,77 @@ export function Check({
   label,
   checked,
   onChange,
+  note,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  note?: ReactNode;
 }) {
   return (
-    <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-[15px]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="size-[18px] accent-indigo"
-      />
-      {label}
-    </label>
+    <div>
+      <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-[15px]">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="size-[18px] accent-indigo"
+        />
+        {label}
+      </label>
+      {note && <div className="pl-7">{note}</div>}
+    </div>
   );
 }
 
 /** 入居者ページの手順。実際に順番がある作業なので番号を振る。 */
 export function Step({
+  id,
   n,
   title,
   status,
+  done,
+  current,
   children,
 }: {
+  id?: string;
   n: number;
   title: string;
   status?: ReactNode;
+  done?: boolean;
+  /** 次にやることがこの手順にある */
+  current?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="border-t border-line pt-6 pb-8">
-      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mincho text-[22px] leading-none text-indigo">{n}</span>
+    <section
+      id={id}
+      className={cx(
+        "mb-5 scroll-mt-6 rounded-lg border bg-sheet p-5 sm:p-6",
+        current ? "border-indigo shadow-[0_0_0_3px_var(--color-glow-soft)]" : "border-line",
+      )}
+    >
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StepBadge n={n} done={done} current={current} />
         <h2 className="text-[18px] font-bold">{title}</h2>
         {status && <span className="text-[13px] text-mute">{status}</span>}
       </div>
       {children}
     </section>
+  );
+}
+
+export function StepBadge({ n, done, current }: { n: number; done?: boolean; current?: boolean }) {
+  return (
+    <span
+      className={cx(
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[14px] font-bold leading-none",
+        done ? "bg-grade-a text-white" : current ? "bg-indigo text-white" : "border border-line text-mute",
+      )}
+      aria-label={done ? `手順${n}・完了` : `手順${n}`}
+    >
+      {done ? "✓" : n}
+    </span>
   );
 }
 

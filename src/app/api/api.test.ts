@@ -119,6 +119,11 @@ describe("入居判定の通しの流れ", () => {
     expect(ex.status).toBe(200);
     expect(ex.body.resident.profile).toMatchObject({ careLevel: 5, medical: { suction: "night" }, physical: { fallsLastYear: 2 } });
     expect(ex.body.resident.profileConfirmed).toBe(false);
+    // 根拠（ダミーは追記からの抜き書き）と、AI が読み取った値を残す
+    expect(ex.body.resident.extraction.evidence).toContainEqual(
+      expect.objectContaining({ field: "suction", source: "スタッフの追記" }),
+    );
+    expect(ex.body.resident.extraction.profile).toEqual(ex.body.resident.profile);
 
     // 未確認のままでは判定できない
     expect((await judgeRoute.POST(req("staff-a", {}), params({ id }))).status).toBe(400);

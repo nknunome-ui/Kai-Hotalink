@@ -178,7 +178,8 @@ export async function issueSurveyToken(fid: string, rid: string, questionIds: st
     questionIds,
     pastExperienceSummary: null,
   };
-  batch.update(residents(fid).doc(rid), { survey, updatedAt: now() });
+  // updatedAt を issuedAt と揃え、「URL を送っただけ」で判定が古くなった扱いにしない（progress.ts）
+  batch.update(residents(fid).doc(rid), { survey, updatedAt: survey.issuedAt });
   await batch.commit();
   return token;
 }

@@ -2,12 +2,13 @@
 import { ref, uploadBytes } from "firebase/storage";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { JudgmentPanel } from "@/components/JudgmentPanel";
 import { ProfileForm } from "@/components/ProfileForm";
-import { Button, Field, Notice, Step, Textarea } from "@/components/ui";
+import { Button, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { clientStorage } from "@/lib/client/firebase";
+import { STEP_LABELS, progressOf, type Progress, type StepKey } from "@/lib/domain/progress";
 import type { JudgmentRecord, Resident } from "@/lib/domain/records";
 import { labelOf, type SurveyQuestion } from "@/lib/domain/survey";
 import { emptyProfile, type ResidentProfile } from "@/lib/domain/types";
@@ -44,32 +45,97 @@ export default function ResidentPage() {
   if (error && !data) return <Notice tone="alert">{error}</Notice>;
   if (!data || !me) return <p className="text-mute">読み込み中…</p>;
   const r = data.resident;
+  const progress = progressOf(r);
 
   return (
     <div>
       <Link href="/residents" className="text-[13px] text-ink-soft hover:text-ink">
-        入居者の一覧に戻る
+        ← 入居者の一覧に戻る
       </Link>
-      <h1 className="mt-1 mb-6 text-[26px] font-bold">{r.name} 様</h1>
+      <h1 className="mt-1 mb-4 text-[26px] font-bold">{r.name} 様</h1>
+      <ProgressBar progress={progress} />
 
-      <div className="grid gap-x-12 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_400px]">
         <div>
-          <DocumentsStep resident={r} facilityId={me.facilityId} onChange={load} />
-          <ProfileStep key={r.extraction?.at ?? "manual"} resident={r} onChange={load} />
-          <SurveyStep resident={r} questions={data.questions} onChange={load} />
+          <DocumentsStep resident={r} facilityId={me.facilityId} progress={progress} onChange={load} />
+          <ProfileStep key={r.extraction?.at ?? "manual"} resident={r} progress={progress} onChange={load} />
+          <SurveyStep resident={r} questions={data.questions} progress={progress} onChange={load} />
         </div>
-        <JudgeStep resident={r} judgments={data.judgments} onChange={load} />
+        <JudgeStep resident={r} judgments={data.judgments} progress={progress} onChange={load} />
       </div>
     </div>
   );
 }
 
+const STEP_ORDER: StepKey[] = ["documents", "profile", "survey", "judge"];
+
+/** 4つの手順の進み具合と、次にやること */
+function ProgressBar({ progress }: { progress: Progress }) {
+  const { done, next } = progress;
+  const go = (k: StepKey) => document.getElementById(`step-${k}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  return (
+    <div className="mb-6 rounded-lg border border-line bg-sheet p-4 sm:p-5">
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {STEP_ORDER.map((k, i) => (
+          <li key={k}>
+            <button
+              type="button"
+              onClick={() => go(k)}
+              className={cx(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[14px] hover:bg-paper",
+                next?.step === k && !next.waiting ? "font-bold text-ink" : done[k] ? "text-ink-soft" : "text-mute",
+              )}
+            >
+              <StepBadge n={i + 1} done={done[k]} current={next?.step === k && !next.waiting} />
+              {STEP_LABELS[k]}
+            </button>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3">
+        {next ? (
+          <>
+            <p className="text-[15px]">
+              <span className="mr-2 text-[13px] text-ink-soft">{next.waiting ? "いまの状態" : "次にやること"}</span>
+              <span className="font-bold">{next.text}</span>
+            </p>
+            {!next.waiting && (
+              <Button variant="quiet" className="min-h-9 px-3 text-[13px]" onClick={() => go(next.step)}>
+                {STEP_LABELS[next.step]}へ移動
+              </Button>
+            )}
+          </>
+        ) : (
+          <p className="text-[15px] font-bold text-grade-a">判定まで完了しています</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const stepProps = (k: StepKey, progress: Progress) => ({
+  id: `step-${k}`,
+  done: progress.done[k],
+  current: progress.next?.step === k && !progress.next.waiting,
+});
+
 // ---------- 1. 資料と追記 ----------
 
-function DocumentsStep({ resident, facilityId, onChange }: { resident: Resident; facilityId: string; onChange: () => void }) {
+function DocumentsStep({
+  resident,
+  facilityId,
+  progress,
+  onChange,
+}: {
+  resident: Resident;
+  facilityId: string;
+  progress: Progress;
+  onChange: () => void;
+}) {
   const { api } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const elapsed = useElapsed(busy === "extract");
   const [notes, setNotes] = useState({
     staffNotes: resident.staffNotes,
     interviewNotes: resident.interviewNotes,
@@ -141,7 +207,12 @@ function DocumentsStep({ resident, facilityId, onChange }: { resident: Resident;
   }
 
   return (
-    <Step n={1} title="資料と追記" status={resident.documents.length ? `資料 ${resident.documents.length}件` : undefined}>
+    <Step
+      n={1}
+      title="資料と追記"
+      status={resident.documents.length ? `資料 ${resident.documents.length}件` : undefined}
+      {...stepProps("documents", progress)}
+    >
       <p className="mb-4 text-[14px] text-ink-soft">
         主治医意見書・ケアプラン・看護サマリーなどをアップロードし、資料にない情報を追記します。
       </p>
@@ -200,14 +271,18 @@ function DocumentsStep({ resident, facilityId, onChange }: { resident: Resident;
           </Button>
         )}
       </div>
-      {busy === "extract" && <p className="mt-2 text-[13px] text-mute">資料を読み取っています。1分ほどかかることがあります。</p>}
+      {busy === "extract" && (
+        <p className="mt-2 text-[13px] text-ink-soft" aria-live="polite">
+          資料を読み取っています（{elapsed}秒）。資料の量によって1〜2分かかります。この画面のままお待ちください。
+        </p>
+      )}
     </Step>
   );
 }
 
 // ---------- 2. 状態の確認 ----------
 
-function ProfileStep({ resident, onChange }: { resident: Resident; onChange: () => void }) {
+function ProfileStep({ resident, progress, onChange }: { resident: Resident; progress: Progress; onChange: () => void }) {
   const { api } = useAuth();
   const [draft, setDraft] = useState<ResidentProfile>(resident.profile ?? emptyProfile());
   const [busy, setBusy] = useState(false);
@@ -233,10 +308,12 @@ function ProfileStep({ resident, onChange }: { resident: Resident; onChange: () 
       : "AIの読み取り結果・未確認";
 
   return (
-    <Step n={2} title="状態の確認" status={status}>
+    <Step n={2} title="状態の確認" status={status} {...stepProps("profile", progress)}>
       {resident.profile && !resident.profileConfirmed && (
         <div className="mb-4">
-          <Notice>AI が読み取った内容です。資料と見比べて、違うところを直してから保存してください。判定は保存後に行えます。</Notice>
+          <Notice>
+            AI が読み取った内容です。各項目の下の「根拠」を見て、違うところを直してから保存してください。根拠がない項目は、資料に記載が見つからなかったものです。判定は保存後に行えます。
+          </Notice>
         </div>
       )}
       {resident.extraction && resident.extraction.uncertain.length > 0 && (
@@ -257,7 +334,7 @@ function ProfileStep({ resident, onChange }: { resident: Resident; onChange: () 
           1 で AI に読み取らせるか、下の項目を直接入力して保存してください。
         </p>
       )}
-      <ProfileForm value={draft} onChange={setDraft} />
+      <ProfileForm value={draft} onChange={setDraft} ai={resident.extraction?.profile} evidence={resident.extraction?.evidence} />
       {error && <div className="mt-4"><Notice tone="alert">{error}</Notice></div>}
       <Button className="mt-5" onClick={save} busy={busy}>
         {resident.profileConfirmed ? "変更を保存" : "確認して保存"}
@@ -271,10 +348,12 @@ function ProfileStep({ resident, onChange }: { resident: Resident; onChange: () 
 function SurveyStep({
   resident,
   questions,
+  progress,
   onChange,
 }: {
   resident: Resident;
   questions: SurveyQuestion[];
+  progress: Progress;
   onChange: () => void;
 }) {
   const { api } = useAuth();
@@ -303,7 +382,7 @@ function SurveyStep({
   const status = !s ? "未発行" : s.submittedAt ? `${fmt(s.submittedAt)} 回答` : `回答待ち（${fmt(s.expiresAt)}まで有効）`;
 
   return (
-    <Step n={3} title="家族アンケート" status={status}>
+    <Step n={3} title="家族アンケート" status={status} {...stepProps("survey", progress)}>
       <p className="mb-4 text-[14px] text-ink-soft">
         URLを発行して、ご家族にメールやLINEで送ってください。ログインなしで、スマホから回答できます。
         {!s && !resident.profileConfirmed && " 先に 2 の状態を保存しておくと、医療的ケアに応じた設問が自動で追加されます。"}
@@ -367,7 +446,17 @@ function SurveyStep({
 
 // ---------- 4. 判定 ----------
 
-function JudgeStep({ resident, judgments, onChange }: { resident: Resident; judgments: JudgmentRecord[]; onChange: () => void }) {
+function JudgeStep({
+  resident,
+  judgments,
+  progress,
+  onChange,
+}: {
+  resident: Resident;
+  judgments: JudgmentRecord[];
+  progress: Progress;
+  onChange: () => void;
+}) {
   const { api } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -390,12 +479,22 @@ function JudgeStep({ resident, judgments, onChange }: { resident: Resident; judg
   }
 
   return (
-    <aside className="lg:sticky lg:top-6 lg:self-start">
-      <div className="mt-2 rounded-lg border border-line bg-sheet p-5 lg:mt-0">
-        <div className="mb-4 flex items-baseline gap-3">
-          <span className="font-mincho text-[22px] leading-none text-indigo">4</span>
+    <aside id="step-judge" className="scroll-mt-6 lg:sticky lg:top-6 lg:self-start">
+      <div
+        className={cx(
+          "rounded-lg border bg-sheet p-5",
+          progress.next?.step === "judge" ? "border-indigo shadow-[0_0_0_3px_var(--color-glow-soft)]" : "border-line",
+        )}
+      >
+        <div className="mb-4 flex items-center gap-3">
+          <StepBadge n={4} done={progress.done.judge} current={progress.next?.step === "judge"} />
           <h2 className="text-[18px] font-bold">入居判定</h2>
         </div>
+        {progress.stale && (
+          <div className="mb-4">
+            <Notice>前回の判定のあとで、資料・状態・アンケートが変わりました。もう一度判定してください。</Notice>
+          </div>
+        )}
         {!canJudge && (
           <p className="mb-4 text-[14px] text-ink-soft">2 で状態を確認・保存すると判定できます。家族アンケートの回答がなくても判定できます。</p>
         )}
@@ -416,4 +515,20 @@ function JudgeStep({ resident, judgments, onChange }: { resident: Resident; judg
       </div>
     </aside>
   );
+}
+
+/** 処理中の経過秒数（長い処理で止まっていないことを見せる） */
+function useElapsed(running: boolean) {
+  const [sec, setSec] = useState(0);
+  const start = useRef(0);
+  useEffect(() => {
+    if (!running) return;
+    start.current = Date.now();
+    const t = setInterval(() => setSec(Math.floor((Date.now() - start.current) / 1000)), 1000);
+    return () => {
+      clearInterval(t);
+      setSec(0);
+    };
+  }, [running]);
+  return sec;
 }
