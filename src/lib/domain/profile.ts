@@ -1,5 +1,18 @@
 // 外部から来た入居者情報（画面の入力・AI の出力）を安全な形に整える。
-import { emptyProfile, type CareLevel, type DementiaLevel, type Mobility, type ResidentProfile, type SuctionNeed } from "./types";
+import {
+  CARE_LEVEL_LABELS,
+  DEMENTIA_LABELS,
+  MOBILITY_LABELS,
+  PROFILE_FIELDS,
+  emptyProfile,
+  type CareLevel,
+  type DementiaLevel,
+  type Evidence,
+  type Mobility,
+  type ProfileField,
+  type ResidentProfile,
+  type SuctionNeed,
+} from "./types";
 
 const SUCTION: SuctionNeed[] = ["none", "day", "night", "both"];
 const MOBILITY: Mobility[] = ["independent", "supervision", "partial", "full", "bedridden"];
@@ -47,4 +60,58 @@ export function normalizeProfile(input: unknown): ResidentProfile {
     },
     summary: typeof i.summary === "string" ? i.summary.slice(0, 4000) : "",
   };
+}
+
+/** AI が返した根拠を、知っている項目だけ・短く整えて残す（1項目1件） */
+export function normalizeEvidence(input: unknown): Evidence[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<ProfileField>();
+  const out: Evidence[] = [];
+  for (const e of input) {
+    if (!e || typeof e !== "object") continue;
+    const { field, quote, source } = e as Record<string, unknown>;
+    if (!PROFILE_FIELDS.includes(field as ProfileField) || seen.has(field as ProfileField)) continue;
+    if (typeof quote !== "string" || !quote.trim()) continue;
+    seen.add(field as ProfileField);
+    out.push({
+      field: field as ProfileField,
+      quote: quote.trim().slice(0, 160),
+      source: typeof source === "string" && source.trim() ? source.trim().slice(0, 80) : "資料",
+    });
+  }
+  return out;
+}
+
+const YES_NO = (v: boolean) => (v ? "あり" : "なし");
+const SUCTION_TEXT: Record<SuctionNeed, string> = { none: "不要", day: "日中のみ", night: "夜間", both: "日中・夜間" };
+
+/** 項目の値を画面表示用の文字にする（AI の値と比べて見せるため） */
+export function fieldText(p: ResidentProfile, f: ProfileField): string {
+  switch (f) {
+    case "age":
+      return p.age === null ? "不明" : `${p.age}歳`;
+    case "careLevel":
+      return CARE_LEVEL_LABELS[p.careLevel];
+    case "suction":
+      return SUCTION_TEXT[p.medical.suction];
+    case "mobility":
+      return MOBILITY_LABELS[p.physical.mobility];
+    case "fallsLastYear":
+      return `${p.physical.fallsLastYear}回`;
+    case "dementiaLevel":
+      return DEMENTIA_LABELS[p.cognition.dementiaLevel].replace(/（.*）/, "");
+    case "gastrostomy":
+    case "tracheostomy":
+    case "oxygen":
+    case "insulin":
+    case "urinaryCatheter":
+    case "dialysis":
+    case "pressureUlcer":
+      return YES_NO(p.medical[f]);
+    case "wandering":
+    case "aggression":
+    case "careRefusal":
+    case "nightDisturbance":
+      return YES_NO(p.cognition[f]);
+  }
 }

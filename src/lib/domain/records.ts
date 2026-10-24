@@ -1,6 +1,6 @@
 // Firestore に保存するレコードの形（API のレスポンスとしてクライアントにも渡す）
 import type { SurveyAnswers } from "./survey";
-import type { FacilitySettings, Grade, JudgmentResult, ResidentProfile } from "./types";
+import type { Evidence, FacilitySettings, Grade, JudgmentResult, ResidentProfile } from "./types";
 
 export interface StoredDocument {
   path: string; // Storage のパス
@@ -27,7 +27,15 @@ export interface Resident {
   profile: ResidentProfile | null;
   /** 施設スタッフが内容を確認・修正したか */
   profileConfirmed: boolean;
-  extraction: { at: string; model: string; uncertain: string[] } | null;
+  extraction: {
+    at: string;
+    model: string;
+    uncertain: string[];
+    /** 項目ごとの根拠（古いデータには無い） */
+    evidence?: Evidence[];
+    /** AI が読み取った値（スタッフが直した項目を見分けるため。古いデータには無い） */
+    profile?: ResidentProfile;
+  } | null;
   staffNotes: string; // 病状・個人情報の追記
   interviewNotes: string; // 面談メモ
   priorFacilityNotes: string; // 前施設やケアマネからのトラブル情報

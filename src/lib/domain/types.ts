@@ -209,3 +209,32 @@ export interface JudgmentResult {
   documents: GeneratedDocument[];
   surveyAnswered: boolean;
 }
+
+/** AI が根拠を示す対象の項目（判定に使う項目） */
+export const PROFILE_FIELDS = [
+  "age",
+  "careLevel",
+  "suction",
+  "gastrostomy",
+  "tracheostomy",
+  "oxygen",
+  "insulin",
+  "urinaryCatheter",
+  "dialysis",
+  "pressureUlcer",
+  "mobility",
+  "fallsLastYear",
+  "dementiaLevel",
+  "wandering",
+  "aggression",
+  "careRefusal",
+  "nightDisturbance",
+] as const;
+export type ProfileField = (typeof PROFILE_FIELDS)[number];
+
+/** AI が項目の値を決めた根拠（資料からの抜き書き） */
+export interface Evidence {
+  field: ProfileField;
+  quote: string;
+  source: string;
+}
