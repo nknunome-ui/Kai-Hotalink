@@ -3,14 +3,6 @@ import type { NextConfig } from "next";
 // 画面はログイン後にブラウザでデータを取得する作りなので、
 // キャッシュ系の実験的機能（cacheComponents など）は使わない。
 const nextConfig: NextConfig = {
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
   poweredByHeader: false,
   async headers() {
     return [
