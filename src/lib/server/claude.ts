@@ -30,83 +30,85 @@ export interface ExtractionResult {
   model: string;
 }
 
-const PROFILE_TOOL: Anthropic.Tool = {
-  name: "record_resident_profile",
-  description: "介護資料から読み取った入居希望者の状態を記録する",
-  input_schema: {
-    type: "object",
-    required: ["careLevel", "medical", "physical", "cognition", "summary", "uncertain", "evidence"],
-    properties: {
-      age: { type: ["integer", "null"], description: "年齢。不明なら null" },
-      careLevel: {
-        type: "integer",
-        minimum: 0,
-        maximum: 7,
-        description: "0=自立, 1=要支援1, 2=要支援2, 3=要介護1, 4=要介護2, 5=要介護3, 6=要介護4, 7=要介護5",
+// 読み取り結果の形。structured outputs で、この形の JSON を必ず返させる。
+// （Claude Sonnet 5.5 などは tool_choice でツールを強制できないため、ツールではなく出力形式で指定する）
+// structured outputs の制約: すべての object に additionalProperties: false、数値の minimum/maximum は使えない。
+const PROFILE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["age", "careLevel", "medical", "physical", "cognition", "summary", "uncertain", "evidence"],
+  properties: {
+    age: { anyOf: [{ type: "integer" }, { type: "null" }], description: "年齢。不明なら null" },
+    careLevel: {
+      type: "integer",
+      enum: [0, 1, 2, 3, 4, 5, 6, 7],
+      description: "0=自立, 1=要支援1, 2=要支援2, 3=要介護1, 4=要介護2, 5=要介護3, 6=要介護4, 7=要介護5",
+    },
+    medical: {
+      type: "object",
+      additionalProperties: false,
+      required: ["suction", "gastrostomy", "tracheostomy", "oxygen", "insulin", "urinaryCatheter", "dialysis", "pressureUlcer"],
+      properties: {
+        suction: { type: "string", enum: ["none", "day", "night", "both"], description: "たん吸引が必要な時間帯" },
+        gastrostomy: { type: "boolean", description: "胃ろう・経管栄養" },
+        tracheostomy: { type: "boolean", description: "気管切開" },
+        oxygen: { type: "boolean", description: "在宅酸素療法" },
+        insulin: { type: "boolean", description: "インスリン注射" },
+        urinaryCatheter: { type: "boolean", description: "尿道カテーテル留置" },
+        dialysis: { type: "boolean", description: "人工透析" },
+        pressureUlcer: { type: "boolean", description: "褥瘡の処置が必要" },
       },
-      medical: {
-        type: "object",
-        required: ["suction", "gastrostomy", "tracheostomy", "oxygen", "insulin", "urinaryCatheter", "dialysis", "pressureUlcer"],
-        properties: {
-          suction: { type: "string", enum: ["none", "day", "night", "both"], description: "たん吸引が必要な時間帯" },
-          gastrostomy: { type: "boolean", description: "胃ろう・経管栄養" },
-          tracheostomy: { type: "boolean", description: "気管切開" },
-          oxygen: { type: "boolean", description: "在宅酸素療法" },
-          insulin: { type: "boolean", description: "インスリン注射" },
-          urinaryCatheter: { type: "boolean", description: "尿道カテーテル留置" },
-          dialysis: { type: "boolean", description: "人工透析" },
-          pressureUlcer: { type: "boolean", description: "褥瘡の処置が必要" },
+    },
+    physical: {
+      type: "object",
+      additionalProperties: false,
+      required: ["mobility", "fallsLastYear"],
+      properties: {
+        mobility: {
+          type: "string",
+          enum: ["independent", "supervision", "partial", "full", "bedridden"],
+          description: "移動の状態: 自立/見守り/一部介助/全介助/寝たきり",
         },
+        fallsLastYear: { type: "integer", description: "直近1年の転倒回数（0以上）。記載がなければ 0" },
       },
-      physical: {
-        type: "object",
-        required: ["mobility", "fallsLastYear"],
-        properties: {
-          mobility: {
-            type: "string",
-            enum: ["independent", "supervision", "partial", "full", "bedridden"],
-            description: "移動の状態: 自立/見守り/一部介助/全介助/寝たきり",
-          },
-          fallsLastYear: { type: "integer", minimum: 0, description: "直近1年の転倒回数。記載がなければ 0" },
+    },
+    cognition: {
+      type: "object",
+      additionalProperties: false,
+      required: ["dementiaLevel", "wandering", "aggression", "careRefusal", "nightDisturbance"],
+      properties: {
+        dementiaLevel: {
+          type: "integer",
+          enum: [0, 1, 2, 3, 4],
+          description: "認知症高齢者の日常生活自立度から: 0=なし/自立, 1=I〜IIa, 2=IIb〜IIIa, 3=IIIb〜IV, 4=M",
         },
+        wandering: { type: "boolean", description: "徘徊" },
+        aggression: { type: "boolean", description: "暴言・暴力" },
+        careRefusal: { type: "boolean", description: "介護拒否" },
+        nightDisturbance: { type: "boolean", description: "昼夜逆転・夜間の不穏" },
       },
-      cognition: {
+    },
+    summary: {
+      type: "string",
+      description: "主な病名、服薬、生活上の注意点などを日本語で300字以内に要約",
+    },
+    uncertain: {
+      type: "array",
+      items: { type: "string" },
+      description: "資料から判断できなかった項目や、施設が面談で確認すべき点（日本語、各1文）",
+    },
+    evidence: {
+      type: "array",
+      description:
+        "値を決めた根拠。資料に記載があった項目ごとに1件。記載がなく既定値（なし・0・不要など）にした項目は含めない",
+      items: {
         type: "object",
-        required: ["dementiaLevel", "wandering", "aggression", "careRefusal", "nightDisturbance"],
+        additionalProperties: false,
+        required: ["field", "quote", "source"],
         properties: {
-          dementiaLevel: {
-            type: "integer",
-            minimum: 0,
-            maximum: 4,
-            description: "認知症高齢者の日常生活自立度から: 0=なし/自立, 1=I〜IIa, 2=IIb〜IIIa, 3=IIIb〜IV, 4=M",
-          },
-          wandering: { type: "boolean" },
-          aggression: { type: "boolean", description: "暴言・暴力" },
-          careRefusal: { type: "boolean", description: "介護拒否" },
-          nightDisturbance: { type: "boolean", description: "昼夜逆転・夜間の不穏" },
-        },
-      },
-      summary: {
-        type: "string",
-        description: "主な病名、服薬、生活上の注意点などを日本語で300字以内に要約",
-      },
-      uncertain: {
-        type: "array",
-        items: { type: "string" },
-        description: "資料から判断できなかった項目や、施設が面談で確認すべき点（日本語、各1文）",
-      },
-      evidence: {
-        type: "array",
-        description:
-          "値を決めた根拠。資料に記載があった項目ごとに1件。記載がなく既定値（なし・0・不要など）にした項目は含めない",
-        items: {
-          type: "object",
-          required: ["field", "quote", "source"],
-          properties: {
-            field: { type: "string", enum: [...PROFILE_FIELDS], description: "項目名（suction などは medical の中の項目）" },
-            quote: { type: "string", description: "根拠になった資料の記述を、原文のまま80字以内で抜き書き" },
-            source: { type: "string", description: "資料のファイル名。スタッフの追記なら「スタッフの追記」" },
-          },
+          field: { type: "string", enum: [...PROFILE_FIELDS], description: "項目名（suction などは medical の中の項目）" },
+          quote: { type: "string", description: "根拠になった資料の記述を、原文のまま80字以内で抜き書き" },
+          source: { type: "string", description: "資料のファイル名。スタッフの追記なら「スタッフの追記」" },
         },
       },
     },
@@ -173,11 +175,11 @@ export async function extractProfile(files: SourceFile[], staffNotes: string): P
 
   const res = await callClaude({
     model: MODEL,
-    max_tokens: 4000,
+    // 思考（adaptive thinking）の分も含むため余裕を持たせる
+    max_tokens: 16000,
     system:
-      "あなたは介護施設の入居相談員を補助するアシスタントです。主治医意見書・ケアプラン・看護サマリーなどの資料から、入居希望者の状態を項目ごとに正確に読み取ってください。資料に書かれていないことは推測せず、該当なし（false / none / 0）にしたうえで、確認が必要なら uncertain に書いてください。値を決めた項目には、根拠になった記述を原文のまま evidence に抜き書きしてください（要約や言い換えはしない）。結果は必ず record_resident_profile ツールで記録してください。",
-    tools: [PROFILE_TOOL],
-    tool_choice: { type: "tool", name: PROFILE_TOOL.name },
+      "あなたは介護施設の入居相談員を補助するアシスタントです。主治医意見書・ケアプラン・看護サマリーなどの資料から、入居希望者の状態を項目ごとに正確に読み取ってください。資料に書かれていないことは推測せず、該当なし（false / none / 0）にしたうえで、確認が必要なら uncertain に書いてください。値を決めた項目には、根拠になった記述を原文のまま evidence に抜き書きしてください（要約や言い換えはしない）。結果は指定された JSON の形式で返してください。",
+    output_config: { effort: "medium", format: { type: "json_schema", schema: PROFILE_SCHEMA } },
     messages: [
       {
         role: "user",
@@ -192,9 +194,19 @@ export async function extractProfile(files: SourceFile[], staffNotes: string): P
     ],
   });
 
-  const tool = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-  if (!tool) throw new Error("AI から抽出結果が返りませんでした");
-  const input = tool.input as Record<string, unknown>;
+  if (res.stop_reason === "refusal") throw new HttpError(502, "AI がこの資料の読み取りを断りました。資料の内容を確認してください");
+  if (res.stop_reason === "max_tokens") throw new HttpError(502, "資料が多すぎて AI が読み取りきれませんでした。資料を減らしてもう一度お試しください");
+  const text = res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    console.error("Claude returned non-JSON", text.slice(0, 500));
+    throw new HttpError(502, "AI の読み取り結果を解釈できませんでした。もう一度お試しください");
+  }
   const uncertain = Array.isArray(input.uncertain)
     ? input.uncertain.filter((x): x is string => typeof x === "string").slice(0, 20)
     : [];
@@ -208,7 +220,9 @@ export async function summarizePastExperience(text: string): Promise<string> {
   if (!aiEnabled()) return t.slice(0, 300);
   const res = await callClaude({
     model: MODEL,
-    max_tokens: 400,
+    // 思考の分も含むため、要約の長さより多めにとる
+    max_tokens: 4000,
+    output_config: { effort: "low" },
     system:
       "介護施設の相談員向けに、入居希望者の家族が書いた「過去に病院や介護サービスで困ったこと」を要約します。家族を評価・ラベル付けする言葉（クレーマー、要注意など）は使わず、事実と家族が望んでいたことを中立的に、日本語で2〜3文にまとめてください。",
     messages: [{ role: "user", content: t.slice(0, 2000) }],
