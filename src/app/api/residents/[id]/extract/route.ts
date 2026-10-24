@@ -26,7 +26,16 @@ export const POST = handle(async (req: Request, ctx: RouteContext<"/api/resident
   for (const d of resident.documents) {
     total += d.size;
     if (total > MAX_TOTAL) throw new HttpError(400, "資料の合計が25MBを超えています。不要な資料を削除してください");
-    const [data] = await bucket().file(d.path).download();
+    let data: Buffer;
+    try {
+      [data] = await bucket().file(d.path).download();
+    } catch (e) {
+      console.error("Storage download error", e);
+      throw new HttpError(
+        500,
+        `資料「${d.name}」をサーバーで読み込めませんでした。Vercel の環境変数 FIREBASE_STORAGE_BUCKET がバケット名と一致しているか確認してください`,
+      );
+    }
     files.push({ name: d.name, contentType: d.contentType, data });
   }
 
