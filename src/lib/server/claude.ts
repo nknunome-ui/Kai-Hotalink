@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { normalizeEvidence, normalizeProfile } from "@/lib/domain/profile";
+import { HttpError } from "./http";
 import { PROFILE_FIELDS, emptyProfile, type Evidence, type ProfileField, type ResidentProfile } from "@/lib/domain/types";
 
 // Claude は「資料を読んで項目を拾う」「自由記述を要約する」だけを担当する。
@@ -112,6 +113,40 @@ const PROFILE_TOOL: Anthropic.Tool = {
   },
 };
 
+/** Claude API を呼ぶ。失敗したら、施設の担当者が対処できる文言の HttpError にする */
+async function callClaude(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+  try {
+    return await anthropic().messages.create(params);
+  } catch (e) {
+    console.error("Claude API error", e);
+    throw new HttpError(502, claudeErrorMessage(e));
+  }
+}
+
+function claudeErrorMessage(e: unknown): string {
+  if (e instanceof Anthropic.APIConnectionTimeoutError) return "AI の応答に時間がかかりすぎました。資料を減らすか、しばらくしてからもう一度お試しください";
+  if (e instanceof Anthropic.APIConnectionError) return "AI（Claude API）に接続できませんでした。しばらくしてからもう一度お試しください";
+  if (!(e instanceof Anthropic.APIError)) return "AI の読み取りでエラーが起きました";
+  const detail = e.message ?? "";
+  switch (e.status) {
+    case 401:
+      return "ANTHROPIC_API_KEY が正しくありません。Anthropic Console で発行したキーを Vercel の環境変数に登録し直してください";
+    case 403:
+      return "この APIキーでは Claude を利用できません。Anthropic Console でキーの権限を確認してください";
+    case 404:
+      return `AI のモデル「${MODEL}」が見つかりません。環境変数 CLAUDE_MODEL を確認してください`;
+    case 413:
+      return "資料のサイズが大きすぎて AI に送れません。不要な資料を削除してください";
+    case 429:
+      return "AI の利用上限に達しました。少し時間をおくか、Anthropic Console の利用上限を確認してください";
+    case 529:
+      return "AI が混み合っています。しばらくしてからもう一度お試しください";
+  }
+  if (/credit balance/i.test(detail)) return "Anthropic のクレジット残高が不足しています。Anthropic Console の Billing でクレジットを追加してください";
+  if (e.status === 400) return `AI が資料を読み取れませんでした（${detail.slice(0, 200)}）`;
+  return `AI の読み取りでエラーが起きました（${e.status ?? "不明"}）`;
+}
+
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 
 function toBlocks(files: SourceFile[]): Anthropic.ContentBlockParam[] {
@@ -136,7 +171,7 @@ function toBlocks(files: SourceFile[]): Anthropic.ContentBlockParam[] {
 export async function extractProfile(files: SourceFile[], staffNotes: string): Promise<ExtractionResult> {
   if (!aiEnabled()) return mockExtract(staffNotes);
 
-  const res = await anthropic().messages.create({
+  const res = await callClaude({
     model: MODEL,
     max_tokens: 4000,
     system:
@@ -171,7 +206,7 @@ export async function summarizePastExperience(text: string): Promise<string> {
   const t = text.trim();
   if (!t) return "";
   if (!aiEnabled()) return t.slice(0, 300);
-  const res = await anthropic().messages.create({
+  const res = await callClaude({
     model: MODEL,
     max_tokens: 400,
     system:
