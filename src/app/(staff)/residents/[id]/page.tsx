@@ -74,7 +74,7 @@ function ProgressBar({ progress }: { progress: Progress }) {
   const { done, next } = progress;
   const go = (k: StepKey) => document.getElementById(`step-${k}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
-    <div className="mb-6 rounded-lg border border-line bg-sheet p-4 sm:p-5">
+    <div className="mb-6 rounded-3xl bg-sheet p-4 shadow-card sm:p-5">
       <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {STEP_ORDER.map((k, i) => (
           <li key={k}>
@@ -82,7 +82,7 @@ function ProgressBar({ progress }: { progress: Progress }) {
               type="button"
               onClick={() => go(k)}
               className={cx(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[14px] hover:bg-paper",
+                "flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[14px] hover:bg-paper",
                 next?.step === k && !next.waiting ? "font-bold text-ink" : done[k] ? "text-ink-soft" : "text-mute",
               )}
             >
@@ -221,8 +221,8 @@ function DocumentsStep({
         主治医意見書・ケアプラン・看護サマリーなどをアップロードし、資料にない情報を追記します。
       </p>
 
-      <label className="flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-ink-soft/40 bg-sheet px-4 py-6 text-center hover:border-indigo">
-        <span className="text-[15px] font-semibold text-indigo">{busy === "upload" ? "アップロード中…" : "ファイルを選ぶ"}</span>
+      <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-brand bg-brand-tint px-4 py-7 text-center transition-colors hover:bg-brand-soft">
+        <span className="text-[15px] font-semibold text-brand-strong">{busy === "upload" ? "アップロード中…" : "ファイルを選ぶ"}</span>
         <span className="text-[12px] text-mute">PDF・写真（JPEG/PNG/WebP）・テキスト、1件20MBまで</span>
         <input
           type="file"
@@ -238,7 +238,7 @@ function DocumentsStep({
       </label>
 
       {resident.documents.length > 0 && (
-        <ul className="mt-3 divide-y divide-line rounded-md border border-line bg-sheet">
+        <ul className="mt-3 divide-y divide-line rounded-2xl border-2 border-line bg-paper">
           {resident.documents.map((d) => (
             <li key={d.path} className="flex items-center gap-3 px-3 py-2 text-[14px]">
               <span className="min-w-0 flex-1 truncate">{d.name}</span>
@@ -321,7 +321,7 @@ function ProfileStep({ resident, progress, onChange }: { resident: Resident; pro
         </div>
       )}
       {resident.extraction && resident.extraction.uncertain.length > 0 && (
-        <div className="mb-5 rounded-md border border-line bg-sheet p-4">
+        <div className="mb-5 rounded-2xl bg-paper p-4">
           <h3 className="mb-1 text-[14px] font-bold">面談で確認したい点</h3>
           <ul className="list-disc space-y-0.5 pl-5 text-[14px]">
             {resident.extraction.uncertain.map((u, i) => (
@@ -396,10 +396,10 @@ function SurveyStep({
       )}
 
       {url && (
-        <div className="mb-4 rounded-md border border-line bg-sheet p-3">
+        <div className="mb-4 rounded-2xl border-2 border-brand-soft bg-brand-tint p-3">
           <p className="mb-2 text-[13px] font-semibold">ご家族に送るURL（この画面を閉じると再表示できません）</p>
           <div className="flex flex-wrap gap-2">
-            <input readOnly value={url} className="min-w-0 flex-1 rounded border border-line bg-paper px-2 py-1.5 text-[13px]" onFocus={(e) => e.target.select()} />
+            <input readOnly value={url} className="min-w-0 flex-1 rounded-xl border-2 border-line bg-sheet px-3 py-1.5 text-[13px]" onFocus={(e) => e.target.select()} />
             <Button
               variant="quiet"
               className="min-h-9 text-[13px]"
@@ -424,7 +424,7 @@ function SurveyStep({
       <p className="mt-2 text-[12px] text-mute">紙で回答してもらった場合は、このURLを開いてスタッフが代わりに入力できます。</p>
 
       {s?.submittedAt && s.answers && (
-        <dl className="mt-6 divide-y divide-line rounded-md border border-line bg-sheet">
+        <dl className="mt-6 divide-y divide-line rounded-2xl bg-paper">
           {questions.map((q) => {
             const a = s.answers![q.id];
             const shown =
@@ -486,8 +486,8 @@ function JudgeStep({
     <aside id="step-judge" className="scroll-mt-6 lg:sticky lg:top-6 lg:self-start">
       <div
         className={cx(
-          "rounded-lg border bg-sheet p-5",
-          progress.next?.step === "judge" ? "border-indigo shadow-[0_0_0_3px_var(--color-glow-soft)]" : "border-line",
+          "rounded-3xl border-2 bg-sheet p-5 shadow-card",
+          progress.next?.step === "judge" ? "border-brand" : "border-transparent",
         )}
       >
         <div className="mb-4 flex items-center gap-3">

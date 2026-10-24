@@ -17,9 +17,9 @@ export function Button({
       {...rest}
       disabled={rest.disabled || busy}
       className={cx(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 text-[15px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        variant === "primary" && "bg-indigo text-white hover:bg-indigo-deep",
-        variant === "quiet" && "border border-line bg-sheet text-ink hover:border-ink-soft",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        variant === "primary" && "bg-brand-strong text-white shadow-[0_2px_0_var(--color-brand-deep)] hover:bg-brand-deep active:translate-y-px active:shadow-none",
+        variant === "quiet" && "border-2 border-brand-soft bg-sheet text-brand-strong hover:border-brand hover:bg-brand-tint",
         variant === "danger" && "text-alert hover:bg-alert-soft",
         className,
       )}
@@ -55,7 +55,7 @@ export function Field({
 }
 
 const inputCls =
-  "w-full rounded-md border border-line bg-sheet px-3 py-2 text-[15px] text-ink placeholder:text-mute focus:border-indigo focus:outline-none";
+  "w-full rounded-xl border-2 border-line bg-sheet px-3 py-2 text-[15px] text-ink placeholder:text-mute/70 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputCls, "min-h-11", props.className)} />;
@@ -87,7 +87,7 @@ export function Check({
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
-          className="size-[18px] accent-indigo"
+          className="size-5 accent-brand-strong"
         />
         {label}
       </label>
@@ -119,8 +119,8 @@ export function Step({
     <section
       id={id}
       className={cx(
-        "mb-5 scroll-mt-6 rounded-lg border bg-sheet p-5 sm:p-6",
-        current ? "border-indigo shadow-[0_0_0_3px_var(--color-glow-soft)]" : "border-line",
+        "mb-5 scroll-mt-6 rounded-3xl border-2 bg-sheet p-5 shadow-card sm:p-6",
+        current ? "border-brand" : "border-transparent",
       )}
     >
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -137,8 +137,8 @@ export function StepBadge({ n, done, current }: { n: number; done?: boolean; cur
   return (
     <span
       className={cx(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[14px] font-bold leading-none",
-        done ? "bg-grade-a text-white" : current ? "bg-indigo text-white" : "border border-line text-mute",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[15px] font-bold leading-none",
+        done ? "bg-grade-a text-white" : current ? "bg-brand-strong text-white" : "bg-brand-tint text-brand-strong",
       )}
       aria-label={done ? `手順${n}・完了` : `手順${n}`}
     >
@@ -152,12 +152,27 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "alert"; c
     <div
       role={tone === "alert" ? "alert" : "status"}
       className={cx(
-        "rounded-md px-4 py-3 text-[14px]",
-        tone === "alert" ? "bg-alert-soft text-alert" : "bg-glow-soft text-ink",
+        "rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
+        tone === "alert" ? "bg-alert-soft text-alert" : "border border-brand-soft bg-brand-tint text-ink",
       )}
     >
       {children}
     </div>
+  );
+}
+
+/** ロゴ: ほたるの光をイメージした丸いマークと名前 */
+export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
+  const lg = size === "lg";
+  return (
+    <span className="inline-flex items-center gap-2">
+      <svg viewBox="0 0 32 32" className={lg ? "size-10" : "size-7"} aria-hidden>
+        <circle cx="16" cy="16" r="15" fill="var(--color-brand-soft)" />
+        <circle cx="16" cy="16" r="9" fill="var(--color-brand)" />
+        <circle cx="13" cy="13" r="3" fill="#fff" opacity="0.85" />
+      </svg>
+      <span className={cx("font-bold tracking-wide text-brand-strong", lg ? "text-[32px]" : "text-[22px]")}>Hotalink</span>
+    </span>
   );
 }
 

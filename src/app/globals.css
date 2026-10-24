@@ -1,32 +1,37 @@
 @import "tailwindcss";
 
 /*
-  Hotalink の色: 夕暮れの藍（文字・主ボタン）と、ほたるの淡い光（判定の灯り）。
-  紙は少し緑みのある白。判定 A〜E は意味の色で、他の用途には使わない。
+  Hotalink の色: あたたかいオレンジと、クリーム色の紙。
+  施設のスタッフにも、アンケートに答えるご家族にも親しみやすいことを優先する。
+  - brand: 明るいオレンジ（アクセント・枠・図形）。白い文字は載せない
+  - brand-strong: 白い文字を載せるボタン・リンク用の濃いオレンジ（白とのコントラスト 4.5 以上）
+  判定 A〜E は意味の色で、他の用途には使わない。
 */
 @theme {
-  --color-paper: #f5f6f1;
+  --color-paper: #fff8f1;
   --color-sheet: #ffffff;
-  --color-ink: #1d2a3a;
-  --color-ink-soft: #3f4c5a;
-  --color-mute: #66717d;
-  --color-line: #d6dbd1;
-  --color-indigo: #2b3a67;
-  --color-indigo-deep: #1f2b4f;
-  --color-glow: #dfe88a;
-  --color-glow-soft: #f3f6cf;
+  --color-ink: #3b302a;
+  --color-ink-soft: #6b5a4e;
+  --color-mute: #7d6c60;
+  --color-line: #f0e2d3;
+  --color-brand: #f08a3c;
+  --color-brand-strong: #c2550f;
+  --color-brand-deep: #a3470c;
+  --color-brand-soft: #ffe3cc;
+  --color-brand-tint: #fff2e6;
 
-  --color-grade-a: #2f6b4f;
-  --color-grade-b: #5f7d24;
-  --color-grade-c: #a86f12;
-  --color-grade-d: #b0502b;
-  --color-grade-e: #8c2f39;
+  --color-grade-a: #2f7d55;
+  --color-grade-b: #5e8c1f;
+  --color-grade-c: #b07d06;
+  --color-grade-d: #c8452b;
+  --color-grade-e: #9b2f3f;
 
-  --color-alert: #a33a2a;
-  --color-alert-soft: #fbece8;
+  --color-alert: #b8321f;
+  --color-alert-soft: #fdece8;
 
-  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
-  --font-mincho: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", "Times New Roman", serif;
+  --font-sans: var(--font-maru), "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(120 72 30 / 0.05), 0 4px 16px rgb(120 72 30 / 0.06);
 }
 
 html {
@@ -43,7 +48,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-indigo);
+  outline: 2px solid var(--color-brand-strong);
   outline-offset: 2px;
 }
 
