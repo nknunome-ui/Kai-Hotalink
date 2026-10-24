@@ -135,8 +135,21 @@ describe("入居判定の通しの流れ", () => {
 
     // アンケートURL発行（医療的ケアなし → 急変時の設問は出ない）
     const link = await json(await surveyLink.POST(req("staff-a", {}), params({ id })));
-    const token = link.body.url.split("/survey/")[1];
+    let token = link.body.url.split("/survey/")[1];
     expect(token.length).toBeGreaterThan(20);
+    expect(link.body.url.startsWith("http://localhost/survey/")).toBe(true);
+    // .env.example のサンプル値のままなら、アクセス中の URL を使う
+    process.env.NEXT_PUBLIC_APP_URL = "https://your-app.vercel.app";
+    try {
+      const again = await json(await surveyLink.POST(req("staff-a", {}), params({ id })));
+      expect(again.body.url.startsWith("http://localhost/survey/")).toBe(true);
+      process.env.NEXT_PUBLIC_APP_URL = "https://hotalink.example.jp/";
+      const third = await json(await surveyLink.POST(req("staff-a", {}), params({ id })));
+      expect(third.body.url.startsWith("https://hotalink.example.jp/survey/")).toBe(true);
+      token = third.body.url.split("/survey/")[1]; // 発行し直したので前の URL は無効
+    } finally {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    }
     expect(JSON.stringify(state.mem.store)).not.toContain(token); // トークンそのものは保存しない
     const sv = await json(await survey.GET(req(null), params({ token })));
     expect(sv.body).toMatchObject({ facilityName: "ひだまりの家", residentName: "山田 花子", submitted: false });
