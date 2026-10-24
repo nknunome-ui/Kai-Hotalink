@@ -7,7 +7,7 @@ import { JudgmentPanel } from "@/components/JudgmentPanel";
 import { ProfileForm } from "@/components/ProfileForm";
 import { Button, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
-import { clientStorage } from "@/lib/client/firebase";
+import { clientStorage, storageErrorMessage } from "@/lib/client/firebase";
 import { STEP_LABELS, progressOf, type Progress, type StepKey } from "@/lib/domain/progress";
 import type { JudgmentRecord, Resident } from "@/lib/domain/records";
 import { labelOf, type SurveyQuestion } from "@/lib/domain/survey";
@@ -156,7 +156,11 @@ function DocumentsStep({
         if (f.size > 20 * 1024 * 1024) throw new Error(`${f.name}：20MB以下のファイルにしてください`);
         const safe = f.name.replace(/[^\w.\-぀-ヿ一-龯]/g, "_").slice(-80);
         const path = `facilities/${facilityId}/residents/${resident.id}/${Date.now()}-${safe}`;
-        await uploadBytes(ref(clientStorage(), path), f, { contentType: f.type });
+        try {
+          await uploadBytes(ref(clientStorage(), path), f, { contentType: f.type });
+        } catch (e) {
+          throw new Error(storageErrorMessage(e, f.name));
+        }
         await api(`/api/residents/${resident.id}/documents`, { method: "POST", body: JSON.stringify({ path, name: f.name }) });
       }
       onChange();
