@@ -117,7 +117,7 @@ function Survey() {
             <button
               type="submit"
               disabled={busy}
-              className="ml-auto min-h-12 rounded-md bg-indigo px-6 text-[17px] font-semibold text-white disabled:opacity-60"
+              className="ml-auto min-h-12 rounded-full bg-brand-strong px-7 text-[17px] font-bold text-white shadow-[0_2px_0_var(--color-brand-deep)] disabled:opacity-60"
             >
               {busy ? "送信中…" : "回答を送信"}
             </button>
@@ -131,8 +131,14 @@ function Survey() {
 function Frame({ facility, children }: { facility?: string; children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-sheet px-4 py-3">
-        <p className="mx-auto max-w-xl text-[15px] font-semibold">{facility ?? ""}</p>
+      <header className="border-b-4 border-brand-soft bg-sheet px-4 py-3">
+        <p className="mx-auto flex max-w-xl items-center gap-2 text-[16px] font-bold text-brand-strong">
+          <svg viewBox="0 0 32 32" className="size-6" aria-hidden>
+            <circle cx="16" cy="16" r="15" fill="var(--color-brand-soft)" />
+            <circle cx="16" cy="16" r="9" fill="var(--color-brand)" />
+          </svg>
+          {facility ?? ""}
+        </p>
       </header>
       <main className="mx-auto max-w-xl px-4 py-8">{children}</main>
     </div>
@@ -156,11 +162,11 @@ function QuestionCard({
 }) {
   const list = Array.isArray(value) ? value : [];
   return (
-    <fieldset id={`q-${q.id}`} className="rounded-lg border border-line bg-sheet p-5">
+    <fieldset id={`q-${q.id}`} className="scroll-mt-6 rounded-3xl bg-sheet p-5 shadow-card sm:p-6">
       <legend className="sr-only">質問 {n}</legend>
-      <p className="mb-4 text-[17px] font-semibold leading-relaxed">
-        <span className="mr-2 font-mincho text-indigo">{n}.</span>
-        {q.text}
+      <p className="mb-4 flex gap-3 text-[17px] font-bold leading-relaxed">
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-strong text-[15px] text-white">{n}</span>
+        <span>{q.text}</span>
       </p>
       {q.type === "text" ? (
         <textarea
@@ -168,7 +174,7 @@ function QuestionCard({
           maxLength={2000}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-line px-3 py-2 text-[16px] focus:border-indigo focus:outline-none"
+          className="w-full rounded-2xl border-2 border-line px-3 py-2 text-[16px] focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint"
         />
       ) : (
         <div className="space-y-2">
@@ -178,8 +184,8 @@ function QuestionCard({
             return (
               <label
                 key={o.value}
-                className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-md border px-4 py-2.5 text-[16px] leading-snug ${
-                  checked ? "border-indigo bg-glow-soft" : "border-line"
+                className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-2.5 text-[16px] leading-snug transition-colors ${
+                  checked ? "border-brand bg-brand-tint font-bold" : "border-line hover:border-brand-soft"
                 } ${limitReached ? "opacity-50" : ""}`}
               >
                 <input
@@ -191,7 +197,7 @@ function QuestionCard({
                     if (q.type === "single") onChange(o.value);
                     else onChange(checked ? list.filter((v) => v !== o.value) : [...list, o.value]);
                   }}
-                  className="size-5 shrink-0 accent-indigo"
+                  className="size-5 shrink-0 accent-brand-strong"
                 />
                 {o.label}
               </label>
@@ -207,7 +213,7 @@ function QuestionCard({
             maxLength={1000}
             value={follow ?? ""}
             onChange={(e) => onFollow(e.target.value)}
-            className="w-full rounded-md border border-line px-3 py-2 text-[16px] focus:border-indigo focus:outline-none"
+            className="w-full rounded-2xl border-2 border-line px-3 py-2 text-[16px] focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint"
           />
         </label>
       )}

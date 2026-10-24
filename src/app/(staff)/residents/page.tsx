@@ -59,24 +59,25 @@ export default function ResidentsPage() {
         {error && <Notice tone="alert">{error}</Notice>}
         {list === null && !error && <p className="text-mute">読み込み中…</p>}
         {list?.length === 0 && (
-          <p className="rounded-md border border-dashed border-line px-5 py-8 text-center text-ink-soft">
-            まだ登録がありません。右の欄からお名前を入れて、最初の方を登録してください。
-          </p>
+          <div className="rounded-3xl border-2 border-dashed border-brand-soft bg-sheet px-5 py-10 text-center">
+            <p className="text-[17px] font-bold text-brand-strong">まだどなたも登録されていません</p>
+            <p className="mt-1 text-ink-soft">お名前を入れて「登録する」を押すと、ここに並びます。</p>
+          </div>
         )}
         {list && list.length > 0 && (
-          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-sheet">
+          <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-sheet shadow-card">
             {list.map((r) => {
               const { next, stale } = progressOf(r);
               const f = facts(r);
               return (
                 <li key={r.id}>
-                  <Link href={`/residents/${r.id}`} className="flex items-center gap-4 px-4 py-4 hover:bg-paper">
+                  <Link href={`/residents/${r.id}`} className="flex items-center gap-4 px-4 py-4 transition-colors hover:bg-brand-tint">
                     {r.latestJudgment ? (
                       <span className={stale ? "opacity-40" : undefined} title={stale ? "判定のあとで情報が変わっています" : undefined}>
                         <GradeLantern grade={r.latestJudgment.grade} size="sm" />
                       </span>
                     ) : (
-                      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-ink-soft/40 text-center text-[10px] leading-[1.15] text-mute">
+                      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-brand-soft bg-brand-tint text-center text-[10px] font-bold leading-[1.15] text-brand-strong">
                         判定
                         <br />
                         前
@@ -88,7 +89,7 @@ export default function ResidentsPage() {
                         {f.length > 0 && <span className="ml-2 text-[13px] font-normal text-ink-soft">{f.join("・")}</span>}
                       </span>
                       {next ? (
-                        <span className={next.waiting ? "block text-[13px] text-ink-soft" : "block text-[13px] font-semibold text-indigo"}>
+                        <span className={next.waiting ? "block text-[13px] text-ink-soft" : "block text-[13px] font-semibold text-brand-strong"}>
                           {next.waiting ? next.text : `次：${next.text}`}
                         </span>
                       ) : (
@@ -108,7 +109,7 @@ export default function ResidentsPage() {
       </section>
 
       <aside className="order-first lg:order-none">
-        <form onSubmit={create} className="rounded-lg border border-line bg-sheet p-5">
+        <form onSubmit={create} className="rounded-3xl border-2 border-brand-soft bg-sheet p-5 shadow-card">
           <h2 className="mb-1 text-[16px] font-bold">入居希望の方を登録</h2>
           <p className="mb-4 text-[13px] text-ink-soft">登録後、資料のアップロードに進みます。</p>
           <label className="mb-1 block text-[13px] font-semibold text-ink-soft" htmlFor="new-name">

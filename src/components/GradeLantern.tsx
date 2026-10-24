@@ -18,7 +18,7 @@ export function GradeLantern({ grade, size = "lg", animate }: { grade: Grade; si
   if (size === "sm") {
     return (
       <span
-        className="inline-flex size-9 items-center justify-center rounded-full font-mincho text-[20px] leading-none text-white"
+        className="inline-flex size-9 items-center justify-center rounded-full text-[19px] font-bold leading-none text-white"
         style={{ background: color }}
         aria-label={`判定 ${grade}：${GRADE_MEANINGS[grade].meaning}`}
       >
@@ -29,8 +29,8 @@ export function GradeLantern({ grade, size = "lg", animate }: { grade: Grade; si
   return (
     <div className="flex items-center gap-5">
       <span
-        className={`inline-flex size-24 shrink-0 items-center justify-center rounded-full font-mincho text-[56px] leading-none text-white ${animate ? "lantern" : ""}`}
-        style={{ background: color, ["--glow-color" as string]: "rgba(223,232,138,0.85)" }}
+        className={`inline-flex size-24 shrink-0 items-center justify-center rounded-full text-[52px] font-bold leading-none text-white shadow-card ${animate ? "lantern" : ""}`}
+        style={{ background: color, ["--glow-color" as string]: "rgba(255,190,120,0.85)" }}
         aria-hidden
       >
         {grade}

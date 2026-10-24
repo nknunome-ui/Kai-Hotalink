@@ -191,7 +191,7 @@ function FieldNote({
   if (ev) {
     lines.push(
       <span key="ev" className="block text-[12px] leading-snug text-ink-soft">
-        <span className="mr-1 rounded bg-glow-soft px-1 font-semibold text-ink">根拠</span>「{ev.quote}」
+        <span className="mr-1 rounded bg-brand-tint px-1 font-semibold text-ink">根拠</span>「{ev.quote}」
         <span className="text-mute">— {ev.source}</span>
       </span>,
     );

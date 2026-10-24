@@ -184,7 +184,7 @@ export default function SettingsPage() {
             {(Object.keys(PRESETS) as PresetId[]).map((id) => (
               <label
                 key={id}
-                className={`cursor-pointer rounded-md border p-3 ${s.preset === id ? "border-indigo bg-glow-soft" : "border-line bg-sheet"}`}
+                className={`cursor-pointer rounded-xl border p-3 ${s.preset === id ? "border-brand bg-brand-tint" : "border-line bg-sheet"}`}
               >
                 <input
                   type="radio"
@@ -199,7 +199,7 @@ export default function SettingsPage() {
             ))}
           </div>
 
-          <details className="mt-4 rounded-md border border-line bg-sheet">
+          <details className="mt-4 rounded-2xl bg-sheet shadow-card">
             <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold">細かく調整する</summary>
             <div className="space-y-5 border-t border-line px-4 py-4">
               <div>
@@ -275,7 +275,7 @@ export default function SettingsPage() {
             状態を登録済みの最近の {sim.length} 人のうち、判定が変わるのは {changed.length} 人です。
           </p>
           {sim.length > 0 && (
-            <ul className="divide-y divide-line rounded-md border border-line bg-sheet">
+            <ul className="divide-y divide-line rounded-2xl bg-sheet shadow-card">
               {sim.map((r) => (
                 <li key={r.id} className="flex items-center gap-3 px-4 py-2 text-[14px]">
                   <span className="min-w-0 flex-1 truncate">{r.name} 様</span>
@@ -299,7 +299,7 @@ export default function SettingsPage() {
         {history.length === 0 ? (
           <p className="text-[14px] text-ink-soft">まだ変更はありません。</p>
         ) : (
-          <ul className="divide-y divide-line rounded-md border border-line bg-sheet text-[14px]">
+          <ul className="divide-y divide-line rounded-2xl bg-sheet shadow-card text-[14px]">
             {history.map((h) => (
               <li key={h.version} className="flex flex-wrap gap-x-4 px-4 py-2">
                 <span className="font-semibold">v{h.version}</span>

@@ -100,7 +100,7 @@ export function JudgmentPanel({ record, fresh }: { record: JudgmentRecord; fresh
 
 function Scores({ scores, total }: { scores: Record<Category, number>; total: number }) {
   return (
-    <div className="mt-4 rounded-md bg-paper p-3">
+    <div className="mt-4 rounded-xl bg-paper p-3">
       <div className="mb-2 flex justify-between text-[12px] text-ink-soft">
         <span>項目スコア（0〜10）</span>
         <span>リスク点 {total} / 100</span>
@@ -109,7 +109,7 @@ function Scores({ scores, total }: { scores: Record<Category, number>; total: nu
         <div key={c} className="mb-1.5 flex items-center gap-2 text-[13px]">
           <span className="w-20 shrink-0 text-ink-soft">{CATEGORY_LABELS[c]}</span>
           <span className="h-2 flex-1 overflow-hidden rounded-full bg-line">
-            <span className="block h-full rounded-full bg-indigo" style={{ width: `${scores[c] * 10}%` }} />
+            <span className="block h-full rounded-full bg-brand-strong" style={{ width: `${scores[c] * 10}%` }} />
           </span>
           <span className="w-6 text-right tabular-nums">{scores[c]}</span>
         </div>
@@ -121,7 +121,7 @@ function Scores({ scores, total }: { scores: Record<Category, number>; total: nu
 function DocumentDraft({ doc }: { doc: GeneratedDocument }) {
   const [copied, setCopied] = useState(false);
   return (
-    <details className="rounded-md border border-line bg-sheet">
+    <details className="rounded-2xl border-2 border-line bg-paper">
       <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold">{doc.title}</summary>
       <div className="border-t border-line px-4 py-3">
         <pre className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed">{doc.body}</pre>

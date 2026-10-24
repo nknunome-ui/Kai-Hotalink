@@ -3,7 +3,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { clientAuth } from "@/lib/client/firebase";
-import { Button, Field, Input, Notice } from "@/components/ui";
+import { Button, Field, Input, Logo, Notice } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,9 +35,11 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="font-mincho text-[34px] tracking-wide text-indigo">Hotalink</h1>
-        <p className="mb-8 text-[14px] text-ink-soft">施設スタッフ用のログイン</p>
+      <div className="w-full max-w-sm rounded-3xl bg-sheet p-7 shadow-card sm:p-8">
+        <h1>
+          <Logo size="lg" />
+        </h1>
+        <p className="mt-2 mb-7 text-[15px] text-ink-soft">おつかれさまです。施設スタッフ用のログインです。</p>
         <form onSubmit={submit} className="space-y-4">
           <Field label="メールアドレス">
             <Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />

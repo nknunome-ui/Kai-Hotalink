@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 import { AuthProvider, useAuth } from "@/lib/client/auth";
-import { Button, Notice, cx } from "@/components/ui";
+import { Button, Logo, Notice, cx } from "@/components/ui";
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
   return (
@@ -35,11 +35,13 @@ function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-sheet">
+      <header className="border-b-4 border-brand-soft bg-sheet">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
-          <Link href="/residents" className="flex items-baseline gap-2">
-            <span className="font-mincho text-[22px] tracking-wide text-indigo">Hotalink</span>
-            {me?.facilityName && <span className="text-[13px] text-ink-soft">{me.facilityName}</span>}
+          <Link href="/residents" className="flex items-center gap-3">
+            <Logo />
+            {me?.facilityName && (
+              <span className="rounded-full bg-brand-tint px-3 py-0.5 text-[13px] font-bold text-brand-strong">{me.facilityName}</span>
+            )}
           </Link>
           <nav className="flex gap-1" aria-label="メインメニュー">
             {nav.map((n) => (
@@ -48,8 +50,8 @@ function Shell({ children }: { children: ReactNode }) {
                 href={n.href}
                 aria-current={pathname.startsWith(n.href) ? "page" : undefined}
                 className={cx(
-                  "rounded-md px-3 py-1.5 text-[14px]",
-                  pathname.startsWith(n.href) ? "bg-glow-soft font-semibold text-ink" : "text-ink-soft hover:text-ink",
+                  "rounded-full px-4 py-1.5 text-[15px] font-bold",
+                  pathname.startsWith(n.href) ? "bg-brand-strong text-white" : "text-ink-soft hover:bg-brand-tint hover:text-brand-strong",
                 )}
               >
                 {n.label}
