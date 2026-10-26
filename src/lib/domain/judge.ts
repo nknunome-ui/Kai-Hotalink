@@ -48,32 +48,64 @@ const cap10 = (n: number) => Math.min(10, n);
 
 export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
   const out: Reason[] = [];
-  const add = (category: Category, text: string) => out.push({ category, impact: "knockout", text });
+  const add = (category: Category, text: string, action: string) => out.push({ category, impact: "knockout", text, action });
 
   const s = p.medical.suction;
   if (s !== "none") {
-    if (acc.suction === "none") add("medical", "たん吸引が必要だが、施設は対応していない");
-    else if ((s === "night" || s === "both") && acc.suction === "day") {
-      add("medical", "夜間のたん吸引が必要だが、施設は夜間に対応できない");
+    if (acc.suction === "none") {
+      add(
+        "medical",
+        "たん吸引が必要だが、施設は対応していない",
+        "訪問看護との連携などで、たん吸引に対応できる体制を用意できるか検討する",
+      );
+    } else if ((s === "night" || s === "both") && acc.suction === "day") {
+      add(
+        "medical",
+        "夜間のたん吸引が必要だが、施設は夜間に対応できない",
+        "夜間のたん吸引に対応できる体制（夜間の看護職員の配置、訪問看護との連携）を用意できるか検討する",
+      );
     }
   }
   for (const item of MEDICAL_ITEMS) {
-    if (p.medical[item] && !acc[item]) add("medical", `${MEDICAL_ITEM_LABELS[item]}に対応できない`);
+    if (p.medical[item] && !acc[item]) {
+      add(
+        "medical",
+        `${MEDICAL_ITEM_LABELS[item]}に対応できない`,
+        `${MEDICAL_ITEM_LABELS[item]}に対応できる体制（看護職員・協力医療機関）を用意できるか検討する`,
+      );
+    }
   }
   if (p.careLevel > acc.maxCareLevel) {
     add(
       "physical",
       `要介護度（${CARE_LEVEL_LABELS[p.careLevel]}）が受け入れ上限（${CARE_LEVEL_LABELS[acc.maxCareLevel]}）を超えている`,
+      "必要な介助量を面談で確認し、職員体制で対応できるか、受け入れ上限を見直せるかを検討する",
     );
   }
   if (p.physical.mobility === "bedridden" && !acc.acceptsBedridden) {
-    add("physical", "寝たきりの方の受け入れに対応していない");
+    add(
+      "physical",
+      "寝たきりの方の受け入れに対応していない",
+      "体位変換・入浴などの介助体制と設備で対応できるか検討する",
+    );
   }
   if (p.cognition.dementiaLevel > acc.maxDementiaLevel) {
-    add("cognition", "認知症の程度が受け入れ範囲を超えている");
+    add(
+      "cognition",
+      "認知症の程度が受け入れ範囲を超えている",
+      "面談で症状と必要な対応を詳しく確認し、認知症ケアの体制で対応できるか検討する",
+    );
   }
-  if (p.cognition.wandering && !acc.acceptsWandering) add("cognition", "徘徊への対応が難しい");
-  if (p.cognition.aggression && !acc.acceptsAggression) add("cognition", "暴言・暴力への対応が難しい");
+  if (p.cognition.wandering && !acc.acceptsWandering) {
+    add("cognition", "徘徊への対応が難しい", "見守りや離設を防ぐ体制で対応できるか検討する");
+  }
+  if (p.cognition.aggression && !acc.acceptsAggression) {
+    add(
+      "cognition",
+      "暴言・暴力への対応が難しい",
+      "主治医と相談して対応方法を確認し、職員の安全も含めて受け入れられるか判断する",
+    );
+  }
   return out;
 }
 
@@ -120,6 +152,7 @@ function scoreReasons(p: ResidentProfile, scores: Record<Category, number>): Rea
       category: "medical",
       impact: impactOf(scores.medical),
       text: `医療的ケアの必要度が高い（${items.join("、")}）`,
+      action: "必要な処置の内容と回数を確認し、看護職員の配置（とくに夜間）で対応できるかを確かめる",
     });
   }
   if (scores.physical >= 3) {
@@ -130,6 +163,7 @@ function scoreReasons(p: ResidentProfile, scores: Record<Category, number>): Rea
       category: "physical",
       impact: impactOf(scores.physical),
       text: `身体介助・転倒の負担が大きい（${items.join("、")}）`,
+      action: "介助の方法と見守りの体制を決め、転倒のリスクをご家族に説明する",
     });
   }
   if (scores.cognition >= 3) {
@@ -144,6 +178,7 @@ function scoreReasons(p: ResidentProfile, scores: Record<Category, number>): Rea
       category: "cognition",
       impact: impactOf(scores.cognition),
       text: `認知・行動面の対応が必要（${items.join("、")}）`,
+      action: "症状が出やすい時間帯ときっかけを面談で確認し、ケアの方法を職員で共有する",
     });
   }
   return out;
@@ -398,7 +433,12 @@ export function judge({ residentName, profile, settings, answers }: JudgeInput):
   else grade = gradeFromScore(score, settings);
 
   if (fall) {
-    reasons.push({ category: "physical", impact: "condition", text: "転倒リスクがある（転倒リスク説明・同意書での合意が前提）" });
+    reasons.push({
+      category: "physical",
+      impact: "condition",
+      text: "転倒リスクがある（転倒リスク説明・同意書での合意が前提）",
+      action: "転倒リスク説明・同意書で、転倒を完全には防げないことをご家族と合意する",
+    });
     if (grade === "A") grade = "B";
   }
 

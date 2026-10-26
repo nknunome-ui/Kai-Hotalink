@@ -35,7 +35,7 @@ function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b-4 border-brand-soft bg-sheet">
+      <header className="border-b-4 border-brand-soft bg-sheet print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
           <Link href="/residents" className="flex items-center gap-3">
             <Logo />
@@ -66,9 +66,9 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 print:max-w-none print:p-0">
         {error ? <Notice tone="alert">{error}</Notice> : me && !me.aiEnabled ? (
-          <div className="mb-6">
+          <div className="mb-6 print:hidden">
             <Notice>AI が未設定のため、資料の読み取りはダミーで動いています。ANTHROPIC_API_KEY を設定すると Claude が資料を読み取ります。</Notice>
           </div>
         ) : null}

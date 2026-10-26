@@ -3,7 +3,7 @@ import { ref, uploadBytes } from "firebase/storage";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { JudgmentPanel } from "@/components/JudgmentPanel";
+import { JudgmentReport, JudgmentSummary } from "@/components/JudgmentPanel";
 import { ProfileForm } from "@/components/ProfileForm";
 import { Button, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
@@ -47,22 +47,28 @@ export default function ResidentPage() {
   const r = data.resident;
   const progress = progressOf(r);
 
+  const latest = data.judgments[0];
+
   return (
     <div>
-      <Link href="/residents" className="text-[13px] text-ink-soft hover:text-ink">
-        ← 入居者の一覧に戻る
-      </Link>
-      <h1 className="mt-1 mb-4 text-[26px] font-bold">{r.name} 様</h1>
-      <ProgressBar progress={progress} />
+      {/* 印刷するときは判定レポートだけを出す */}
+      <div className="print:hidden">
+        <Link href="/residents" className="text-[13px] text-ink-soft hover:text-ink">
+          ← 入居者の一覧に戻る
+        </Link>
+        <h1 className="mt-1 mb-4 text-[26px] font-bold">{r.name} 様</h1>
+        <ProgressBar progress={progress} />
 
-      <div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <div>
-          <DocumentsStep resident={r} facilityId={me.facilityId} progress={progress} onChange={load} />
-          <ProfileStep key={r.extraction?.at ?? "manual"} resident={r} progress={progress} onChange={load} />
-          <SurveyStep resident={r} questions={data.questions} progress={progress} onChange={load} />
+        <div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div>
+            <DocumentsStep resident={r} facilityId={me.facilityId} progress={progress} onChange={load} />
+            <ProfileStep key={r.extraction?.at ?? "manual"} resident={r} progress={progress} onChange={load} />
+            <SurveyStep resident={r} questions={data.questions} progress={progress} onChange={load} />
+          </div>
+          <JudgeStep resident={r} judgments={data.judgments} progress={progress} onChange={load} />
         </div>
-        <JudgeStep resident={r} judgments={data.judgments} progress={progress} onChange={load} />
       </div>
+      {latest && <JudgmentReport record={latest} residentName={r.name} />}
     </div>
   );
 }
@@ -512,10 +518,9 @@ function JudgeStep({
 
         {latest && (
           <div className="mt-6 border-t border-line pt-6">
-            <JudgmentPanel record={latest} fresh={latest.id === freshId} />
+            <JudgmentSummary record={latest} fresh={latest.id === freshId} />
           </div>
         )}
-        <p className="mt-6 text-[12px] text-mute">判定は判断材料です。入居の可否は施設の担当者が決めてください。</p>
       </div>
     </aside>
   );

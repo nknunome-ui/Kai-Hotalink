@@ -75,3 +75,15 @@ body {
 .lantern {
   animation: lantern-on 900ms ease-out both;
 }
+
+/* 印刷: 紙の背景は白にし、色付きの帯や丸はそのまま印刷する */
+@media print {
+  html {
+    background: #fff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  details > summary {
+    list-style: none;
+  }
+}
