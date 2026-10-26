@@ -181,6 +181,8 @@ export interface Reason {
   category: Category;
   impact: ReasonImpact;
   text: string;
+  /** 施設が取れる対応の提案（古い判定記録には無い） */
+  action?: string;
 }
 
 export type GapLevel = "大" | "中" | "小";

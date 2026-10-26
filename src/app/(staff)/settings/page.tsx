@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { GradeLantern } from "@/components/GradeLantern";
-import { Button, Check, Field, Input, Notice, Select } from "@/components/ui";
+import { Button, Field, Input, Notice, Segmented, Select, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { PRESETS } from "@/lib/domain/presets";
 import type { SettingsHistoryEntry, SettingsRecord } from "@/lib/domain/records";
@@ -16,6 +16,7 @@ import {
   type Grade,
   type PresetId,
   type SuctionCapability,
+  type Thresholds,
 } from "@/lib/domain/types";
 
 interface SimRow {
@@ -37,6 +38,78 @@ const MEDICAL: [keyof Acceptance, string][] = [
   ["dialysis", "人工透析"],
   ["pressureUlcer", "褥瘡の処置"],
 ];
+
+const SUPPORT: [keyof Acceptance, string][] = [
+  ["nightNurse", "夜間も看護師が常駐"],
+  ["endOfLifeCare", "看取りに対応"],
+  ["contactsMinorChanges", "小さな変化でもご家族に連絡"],
+  ["routineReport", "月1回程度の定期報告"],
+];
+
+type Strictness = "lenient" | "normal" | "strict";
+const STRICTNESS: Record<Strictness, { label: string; thresholds: Thresholds }> = {
+  lenient: { label: "ゆるめ", thresholds: { a: 25, b: 45, c: 65 } },
+  normal: { label: "ふつう", thresholds: { a: 20, b: 40, c: 60 } },
+  strict: { label: "きびしめ", thresholds: { a: 15, b: 35, c: 55 } },
+};
+
+function strictnessOf(t: Thresholds): Strictness | "custom" {
+  const hit = (Object.keys(STRICTNESS) as Strictness[]).find((k) => {
+    const x = STRICTNESS[k].thresholds;
+    return x.a === t.a && x.b === t.b && x.c === t.c;
+  });
+  return hit ?? "custom";
+}
+
+/** 受け入れていない項目の一覧（設定画面の上に出す） */
+function refusedItems(acc: Acceptance): string[] {
+  const out: string[] = [];
+  if (acc.suction === "none") out.push("たん吸引が必要な方");
+  else if (acc.suction === "day") out.push("夜間のたん吸引が必要な方");
+  for (const [k, l] of MEDICAL) if (!acc[k]) out.push(`${l}の方`);
+  if (acc.maxCareLevel < 7) out.push(`${CARE_LEVEL_LABELS[(acc.maxCareLevel + 1) as CareLevel]}以上の方`);
+  if (acc.maxDementiaLevel < 4) out.push(`認知症が「${DEMENTIA_LABELS[(acc.maxDementiaLevel + 1) as DementiaLevel].split("（")[0]}」以上の方`);
+  if (!acc.acceptsBedridden) out.push("寝たきりの方");
+  if (!acc.acceptsWandering) out.push("徘徊のある方");
+  if (!acc.acceptsAggression) out.push("暴言・暴力のある方");
+  return out;
+}
+
+function Card({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-3xl bg-sheet p-5 shadow-card sm:p-6">
+      <h2 className="text-[18px] font-bold">{title}</h2>
+      {note && <p className="mt-0.5 mb-3 text-[13px] text-ink-soft">{note}</p>}
+      <div className={note ? undefined : "mt-3"}>{children}</div>
+    </section>
+  );
+}
+
+function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line py-3 last:border-0">
+      <div className="min-w-0">
+        <p className="text-[15px] font-bold">{label}</p>
+        {hint && <p className="text-[12px] text-mute">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function YesNo({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <Segmented<"yes" | "no">
+      label={label}
+      value={value ? "yes" : "no"}
+      onChange={(v) => onChange(v === "yes")}
+      options={[
+        { value: "yes", label: "受け入れる" },
+        { value: "no", label: "受け入れない", tone: "no" },
+      ]}
+    />
+  );
+}
 
 export default function SettingsPage() {
   const { api, me, refreshMe } = useAuth();
@@ -102,109 +175,181 @@ export default function SettingsPage() {
   }
 
   const changed = sim?.filter((r) => r.before.grade !== r.after.grade) ?? [];
+  const dirty = JSON.stringify(s) !== JSON.stringify(rec.settings);
+  const refused = refusedItems(acc);
+  const strictness = strictnessOf(s.thresholds);
 
   return (
-    <div className="max-w-3xl">
+    <div className={cx("max-w-3xl", dirty && isAdmin && "pb-28")}>
       <h1 className="mb-1 text-[24px] font-bold">受け入れ設定</h1>
       <p className="mb-6 text-[14px] text-ink-soft">
-        施設が対応できる範囲と、判定の基準を決めます。現在の設定：v{rec.version}
-        {rec.updatedAt && `（${fmt(rec.updatedAt)} 更新）`}
-        {!isAdmin && "。設定の変更は施設の管理者のみ行えます。"}
+        施設で受け入れられる方の範囲を決めます。ここで「受け入れない」にした項目に当てはまる方は、判定が D（2つ以上なら E）になります。
+        <br />
+        <span className="text-mute">
+          現在の設定：v{rec.version}
+          {rec.updatedAt && `（${fmt(rec.updatedAt)} 更新）`}
+        </span>
       </p>
+      {!isAdmin && (
+        <div className="mb-6">
+          <Notice>設定を変更できるのは施設の管理者だけです。内容の確認はできます。</Notice>
+        </div>
+      )}
 
-      <fieldset disabled={!isAdmin} className="space-y-10">
-        <section className="space-y-4">
-          <h2 className="text-[18px] font-bold">施設</h2>
-          <Field label="施設名" hint="家族アンケートの画面や同意書の文案に表示されます。">
+      <section className="mb-6 rounded-3xl border-2 border-brand-soft bg-brand-tint p-5">
+        <h2 className="text-[15px] font-bold">この施設で受け入れていない方</h2>
+        {refused.length === 0 ? (
+          <p className="mt-1 text-[14px] text-ink-soft">受け入れの制限はありません。</p>
+        ) : (
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {refused.map((x) => (
+              <li key={x} className="rounded-full bg-sheet px-3 py-1 text-[13px] font-bold text-ink-soft">
+                {x}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <fieldset disabled={!isAdmin} className="space-y-6">
+        <Card title="施設の名前">
+          <Field label="施設名" hint="家族アンケートの画面や、同意書の文案に表示されます。">
             <Input value={s.facilityName} maxLength={100} onChange={(e) => setAll({ facilityName: e.target.value })} />
           </Field>
-        </section>
+        </Card>
 
-        <section>
-          <h2 className="mb-1 text-[18px] font-bold">受け入れ範囲</h2>
-          <p className="mb-4 text-[14px] text-ink-soft">ここで対応できないとした項目に当てはまる方は、判定が D（2つ以上なら E）になります。</p>
+        <Card title="医療的ケア" note="対応できる医療的ケアを選んでください。">
+          <Row label="たん吸引">
+            <Segmented<SuctionCapability>
+              label="たん吸引"
+              value={acc.suction}
+              onChange={(v) => setAcc({ suction: v })}
+              options={[
+                { value: "both", label: "日中・夜間" },
+                { value: "day", label: "日中のみ" },
+                { value: "none", label: "対応しない", tone: "no" },
+              ]}
+            />
+          </Row>
+          {MEDICAL.map(([k, l]) => (
+            <Row key={k} label={l}>
+              <YesNo label={l} value={acc[k] as boolean} onChange={(v) => setAcc({ [k]: v })} />
+            </Row>
+          ))}
+        </Card>
 
-          <h3 className="mb-2 text-[15px] font-bold">医療的ケア</h3>
-          <div className="mb-3 grid gap-4 sm:grid-cols-2">
-            <Field label="たん吸引">
-              <Select value={acc.suction} onChange={(e) => setAcc({ suction: e.target.value as SuctionCapability })}>
-                <option value="none">対応しない</option>
-                <option value="day">日中のみ対応</option>
-                <option value="both">日中・夜間とも対応</option>
-              </Select>
-            </Field>
-          </div>
-          <div className="grid gap-x-6 sm:grid-cols-2">
-            {MEDICAL.map(([k, l]) => (
-              <Check key={k} label={`${l}に対応できる`} checked={acc[k] as boolean} onChange={(v) => setAcc({ [k]: v })} />
-            ))}
-          </div>
+        <Card title="介護度・認知症" note="どの程度の方まで受け入れるかを選んでください。">
+          <Row label="要介護度">
+            <Select
+              aria-label="受け入れる要介護度の上限"
+              className="w-auto min-w-44"
+              value={acc.maxCareLevel}
+              onChange={(e) => setAcc({ maxCareLevel: Number(e.target.value) as CareLevel })}
+            >
+              {Object.entries(CARE_LEVEL_LABELS).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}まで
+                </option>
+              ))}
+            </Select>
+          </Row>
+          <Row label="認知症の程度">
+            <Select
+              aria-label="受け入れる認知症の程度の上限"
+              className="w-auto min-w-44"
+              value={acc.maxDementiaLevel}
+              onChange={(e) => setAcc({ maxDementiaLevel: Number(e.target.value) as DementiaLevel })}
+            >
+              {Object.entries(DEMENTIA_LABELS).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l.split("（")[0]}まで
+                </option>
+              ))}
+            </Select>
+          </Row>
+          <Row label="寝たきりの方">
+            <YesNo label="寝たきりの方" value={acc.acceptsBedridden} onChange={(v) => setAcc({ acceptsBedridden: v })} />
+          </Row>
+          <Row label="徘徊のある方">
+            <YesNo label="徘徊のある方" value={acc.acceptsWandering} onChange={(v) => setAcc({ acceptsWandering: v })} />
+          </Row>
+          <Row label="暴言・暴力のある方">
+            <YesNo label="暴言・暴力のある方" value={acc.acceptsAggression} onChange={(v) => setAcc({ acceptsAggression: v })} />
+          </Row>
+        </Card>
 
-          <h3 className="mt-6 mb-2 text-[15px] font-bold">身体・認知</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="受け入れる要介護度の上限">
-              <Select value={acc.maxCareLevel} onChange={(e) => setAcc({ maxCareLevel: Number(e.target.value) as CareLevel })}>
-                {Object.entries(CARE_LEVEL_LABELS).map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {l}まで
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="受け入れる認知症の程度の上限">
-              <Select value={acc.maxDementiaLevel} onChange={(e) => setAcc({ maxDementiaLevel: Number(e.target.value) as DementiaLevel })}>
-                {Object.entries(DEMENTIA_LABELS).map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {l.split("（")[0]}まで
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <div className="mt-2 grid gap-x-6 sm:grid-cols-2">
-            <Check label="寝たきりの方を受け入れる" checked={acc.acceptsBedridden} onChange={(v) => setAcc({ acceptsBedridden: v })} />
-            <Check label="徘徊のある方を受け入れる" checked={acc.acceptsWandering} onChange={(v) => setAcc({ acceptsWandering: v })} />
-            <Check label="暴言・暴力のある方を受け入れる" checked={acc.acceptsAggression} onChange={(v) => setAcc({ acceptsAggression: v })} />
-          </div>
+        <Card title="施設の体制" note="判定の A〜E には影響しません。ご家族への事前説明や、同意書の文案に使います。">
+          {SUPPORT.map(([k, l]) => (
+            <Row key={k} label={l}>
+              <Segmented<"yes" | "no">
+                label={l}
+                value={acc[k] ? "yes" : "no"}
+                onChange={(v) => setAcc({ [k]: v === "yes" })}
+                options={[
+                  { value: "yes", label: "している" },
+                  { value: "no", label: "していない", tone: "no" },
+                ]}
+              />
+            </Row>
+          ))}
+        </Card>
 
-          <h3 className="mt-6 mb-2 text-[15px] font-bold">体制</h3>
-          <p className="mb-2 text-[13px] text-ink-soft">家族の希望とのずれ（事前に説明すべき点）や、同意書の文案に使います。</p>
-          <div className="grid gap-x-6 sm:grid-cols-2">
-            <Check label="夜間も看護師が常駐している" checked={acc.nightNurse} onChange={(v) => setAcc({ nightNurse: v })} />
-            <Check label="看取りに対応している" checked={acc.endOfLifeCare} onChange={(v) => setAcc({ endOfLifeCare: v })} />
-            <Check label="小さな変化でも家族に連絡している" checked={acc.contactsMinorChanges} onChange={(v) => setAcc({ contactsMinorChanges: v })} />
-            <Check label="月1回程度の定期報告をしている" checked={acc.routineReport} onChange={(v) => setAcc({ routineReport: v })} />
-          </div>
-        </section>
-
-        <section>
-          <h2 className="mb-1 text-[18px] font-bold">判定の基準</h2>
-          <p className="mb-4 text-[14px] text-ink-soft">施設の得意なケアに合わせて選びます。迷ったら「標準」のままで大丈夫です。</p>
+        <Card title="判定の基準" note="迷ったら「標準」「ふつう」のままで大丈夫です。">
+          <p className="mb-2 text-[14px] font-bold">施設の得意なケア</p>
           <div className="grid gap-2 sm:grid-cols-3">
             {(Object.keys(PRESETS) as PresetId[]).map((id) => (
               <label
                 key={id}
-                className={`cursor-pointer rounded-xl border p-3 ${s.preset === id ? "border-brand bg-brand-tint" : "border-line bg-sheet"}`}
+                className={cx(
+                  "cursor-pointer rounded-2xl border-2 p-3",
+                  s.preset === id ? "border-brand bg-brand-tint" : "border-line bg-sheet hover:border-brand-soft",
+                )}
               >
                 <input
                   type="radio"
                   name="preset"
                   className="sr-only"
                   checked={s.preset === id}
-                  onChange={() => setAll({ preset: id, weights: { ...PRESETS[id].weights }, thresholds: { ...PRESETS[id].thresholds } })}
+                  onChange={() => setAll({ preset: id, weights: { ...PRESETS[id].weights } })}
                 />
-                <span className="block text-[15px] font-semibold">{PRESETS[id].label}</span>
+                <span className="block text-[15px] font-bold">{PRESETS[id].label}</span>
                 <span className="block text-[12px] text-ink-soft">{PRESETS[id].description}</span>
               </label>
             ))}
           </div>
 
-          <details className="mt-4 rounded-2xl bg-sheet shadow-card">
-            <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold">細かく調整する</summary>
-            <div className="space-y-5 border-t border-line px-4 py-4">
+          <div className="mt-5 space-y-1">
+            <Row label="判定のきびしさ" hint="きびしめにすると、同じ方でも判定が下がりやすくなります。">
+              <Segmented<Strictness | "custom">
+                label="判定のきびしさ"
+                value={strictness}
+                onChange={(v) => v !== "custom" && setAll({ thresholds: { ...STRICTNESS[v].thresholds } })}
+                options={[
+                  ...(Object.keys(STRICTNESS) as Strictness[]).map((k) => ({ value: k, label: STRICTNESS[k].label })),
+                  ...(strictness === "custom" ? [{ value: "custom" as const, label: "細かく設定中" }] : []),
+                ]}
+              />
+            </Row>
+            <Row label="ご家族とのずれの表示" hint="判定の A〜E には影響しません。表示する量だけを変えます。">
+              <Segmented<GapSensitivity>
+                label="ご家族とのずれの表示"
+                value={s.gapSensitivity}
+                onChange={(v) => setAll({ gapSensitivity: v })}
+                options={[
+                  { value: "low", label: "大きなずれだけ" },
+                  { value: "normal", label: "ふつう" },
+                  { value: "high", label: "小さなずれも" },
+                ]}
+              />
+            </Row>
+          </div>
+
+          <details className="mt-4 rounded-2xl bg-paper">
+            <summary className="cursor-pointer px-4 py-3 text-[14px] font-bold text-ink-soft">さらに細かく調整する（上級者向け）</summary>
+            <div className="space-y-5 px-4 pb-4">
               <div>
                 <p className="mb-2 text-[13px] text-ink-soft">
-                  リスク点（0〜100）がこの値未満なら、その判定になります。足切りに当たらない限り、C の境目以上は D です。
+                  リスク点（0〜100）がこの値未満なら、その判定になります。受け入れ範囲外の項目がない限り、C の境目以上は D です。
                 </p>
                 <div className="grid grid-cols-3 gap-3">
                   {(["a", "b", "c"] as const).map((k) => (
@@ -243,28 +388,27 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
-              <Field label="事前に説明すべき点の表示" hint="家族の回答は ABCDE には影響しません。ここでは表示する量だけを変えます。">
-                <Select value={s.gapSensitivity} onChange={(e) => setAll({ gapSensitivity: e.target.value as GapSensitivity })}>
-                  <option value="low">大きなずれだけ表示</option>
-                  <option value="normal">中程度以上を表示（標準）</option>
-                  <option value="high">小さなずれも表示</option>
-                </Select>
-              </Field>
             </div>
           </details>
-        </section>
+        </Card>
       </fieldset>
 
       {msg && <div className="mt-6"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
 
-      {isAdmin && (
-        <div className="mt-8 flex flex-wrap gap-3 border-t border-line pt-6">
-          <Button variant="quiet" onClick={simulate} busy={busy === "sim"}>
-            保存前に試算する
-          </Button>
-          <Button onClick={save} busy={busy === "save"}>
-            設定を保存
-          </Button>
+      {isAdmin && dirty && (
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t-4 border-brand-soft bg-sheet/95 px-4 py-3 backdrop-blur">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3">
+            <p className="mr-auto text-[14px] font-bold">保存していない変更があります</p>
+            <Button variant="quiet" onClick={() => setS(rec.settings)}>
+              元に戻す
+            </Button>
+            <Button variant="quiet" onClick={simulate} busy={busy === "sim"}>
+              判定がどう変わるか試算
+            </Button>
+            <Button onClick={save} busy={busy === "save"}>
+              保存する
+            </Button>
+          </div>
         </div>
       )}
 

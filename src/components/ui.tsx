@@ -161,6 +161,45 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "alert"; c
   );
 }
 
+/** 選択肢から1つを選ぶボタンの並び（「受け入れる / 受け入れない」など） */
+export function Segmented<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  /** 読み上げ用のラベル */
+  label: string;
+  value: T;
+  options: { value: T; label: string; tone?: "yes" | "no" }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-full bg-paper p-1">
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className={cx(
+              "min-h-9 rounded-full px-4 text-[14px] font-bold transition-colors disabled:cursor-not-allowed",
+              !on && "text-ink-soft hover:bg-sheet hover:text-ink",
+              on && o.tone === "no" && "bg-ink-soft text-white",
+              on && o.tone !== "no" && "bg-brand-strong text-white",
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** ロゴ: ほたるの光をイメージした丸いマークと名前 */
 export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   const lg = size === "lg";
