@@ -1,10 +1,10 @@
 "use client";
 import type { ReactNode } from "react";
 import { fieldText } from "@/lib/domain/profile";
+import { MEDICAL_CARE, MEDICAL_GROUPS, neededItems } from "@/lib/domain/medical";
 import {
   CARE_LEVEL_LABELS,
   DEMENTIA_LABELS,
-  MEDICAL_ITEM_LABELS,
   MOBILITY_LABELS,
   type CareLevel,
   type DementiaLevel,
@@ -12,18 +12,8 @@ import {
   type Mobility,
   type ProfileField,
   type ResidentProfile,
-  type SuctionNeed,
 } from "@/lib/domain/types";
 import { Check, Field, Input, Select, Textarea } from "./ui";
-
-const SUCTION_LABELS: Record<SuctionNeed, string> = {
-  none: "不要",
-  day: "日中のみ必要",
-  night: "夜間に必要",
-  both: "日中・夜間とも必要",
-};
-
-type MedicalKey = keyof typeof MEDICAL_ITEM_LABELS;
 
 export function ProfileForm({
   value,
@@ -65,30 +55,47 @@ export function ProfileForm({
       </div>
 
       <fieldset>
-        <legend className="mb-2 text-[15px] font-bold">医療的ケア</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="たん吸引" note={note("suction")}>
-            <Select
-              value={value.medical.suction}
-              onChange={(e) => set({ medical: { ...value.medical, suction: e.target.value as SuctionNeed } })}
-            >
-              {Object.entries(SUCTION_LABELS).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <div className="mt-2 grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-          {(Object.keys(MEDICAL_ITEM_LABELS) as MedicalKey[]).map((k) => (
-            <Check
-              key={k}
-              label={MEDICAL_ITEM_LABELS[k]}
-              checked={value.medical[k]}
-              onChange={(v) => set({ medical: { ...value.medical, [k]: v } })}
-              note={note(k)}
-            />
+        <legend className="mb-1 text-[15px] font-bold">医療的ケア</legend>
+        <p className="mb-3 text-[13px] text-ink-soft">
+          必要なケアにチェックを入れます。
+          {neededItems(value.medical).length > 0 && `いま ${neededItems(value.medical).length} 項目が必要になっています。`}
+          「夜間も」は、夜（20時〜6時）にもケアが必要な場合に選びます。
+        </p>
+        <div className="space-y-4">
+          {MEDICAL_GROUPS.map((g) => (
+            <div key={g.id} className="rounded-2xl bg-paper p-3">
+              <p className="mb-1 text-[13px] font-bold text-ink-soft">{g.label}</p>
+              <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+                {MEDICAL_CARE.filter((m) => m.group === g.id).map((m) => {
+                  const need = value.medical[m.id];
+                  const setNeed = (v: typeof need) => set({ medical: { ...value.medical, [m.id]: v } });
+                  return (
+                    <Check
+                      key={m.id}
+                      label={m.label}
+                      checked={need !== "none"}
+                      onChange={(v) => setNeed(v ? "day" : "none")}
+                      note={
+                        <>
+                          {m.night && need !== "none" && (
+                            <label className="mb-1 flex cursor-pointer items-center gap-2 text-[13px] font-bold text-brand-strong">
+                              <input
+                                type="checkbox"
+                                className="size-4 accent-brand-strong"
+                                checked={need === "night"}
+                                onChange={(e) => setNeed(e.target.checked ? "night" : "day")}
+                              />
+                              夜間も必要
+                            </label>
+                          )}
+                          {note(m.id)}
+                        </>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
       </fieldset>

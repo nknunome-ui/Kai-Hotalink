@@ -12,8 +12,8 @@ function profile(patch: (p: ResidentProfile) => void): ResidentProfile {
 
 const settings = () => {
   const s = defaultSettings("ひだまりの家");
-  s.acceptance.suction = "day";
-  s.acceptance.nightNurse = false;
+  s.acceptance.medical.suctionOral = "day";
+  s.acceptance.nurseStaffing = "day";
   return s;
 };
 
@@ -21,19 +21,19 @@ describe("足切り", () => {
   it("企画書の例: 夜間のたん吸引が必要で施設が日中のみ → D と原因", () => {
     const p = profile((p) => {
       p.careLevel = 5;
-      p.medical.suction = "night";
+      p.medical.suctionOral = "night";
       p.physical.fallsLastYear = 2;
     });
     const r = judge({ residentName: "山田", profile: p, settings: settings(), answers: null });
     expect(r.grade).toBe("D");
-    expect(r.reasons[0]).toMatchObject({ impact: "knockout", text: "夜間のたん吸引が必要だが、施設は夜間に対応できない" });
+    expect(r.reasons[0]).toMatchObject({ impact: "knockout", text: "夜間の喀痰吸引（口腔内・鼻腔内）が必要だが、施設は夜間に対応できない" });
     expect(r.documents).toHaveLength(0);
   });
 
   it("足切り2つ以上 → E", () => {
     const p = profile((p) => {
-      p.medical.dialysis = true;
-      p.medical.tracheostomy = true;
+      p.medical.tppv = "day";
+      p.medical.tracheostomy = "day";
     });
     expect(knockouts(p, settings().acceptance)).toHaveLength(2);
     expect(judge({ residentName: "", profile: p, settings: settings(), answers: null }).grade).toBe("E");
@@ -67,10 +67,10 @@ describe("項目スコアと ABCDE", () => {
 
   it("スコアは各カテゴリ 10 で頭打ち", () => {
     const p = profile((p) => {
-      p.medical.gastrostomy = true;
-      p.medical.tracheostomy = true;
-      p.medical.oxygen = true;
-      p.medical.dialysis = true;
+      p.medical.tubeGastric = "day";
+      p.medical.tracheostomy = "day";
+      p.medical.oxygen = "day";
+      p.medical.hemodialysis = "day";
     });
     expect(categoryScores(p).medical).toBe(10);
   });
@@ -90,7 +90,7 @@ describe("項目スコアと ABCDE", () => {
   });
 
   it("同じ入力なら同じ結果", () => {
-    const p = profile((p) => (p.medical.oxygen = true));
+    const p = profile((p) => (p.medical.oxygen = "day"));
     const r1 = judge({ residentName: "", profile: p, settings: settings(), answers: null });
     const r2 = judge({ residentName: "", profile: p, settings: settings(), answers: null });
     expect(r1).toEqual(r2);
@@ -100,8 +100,8 @@ describe("項目スコアと ABCDE", () => {
 describe("期待値のずれ", () => {
   const severe = profile((p) => {
     p.careLevel = 7;
-    p.medical.gastrostomy = true;
-    p.medical.suction = "day";
+    p.medical.tubeGastric = "day";
+    p.medical.suctionOral = "day";
     p.physical.mobility = "bedridden";
   });
 
@@ -144,7 +144,7 @@ describe("期待値のずれ", () => {
 describe("アンケート", () => {
   it("医療的ケアがあると急変時の設問を追加（動的生成）", () => {
     expect(buildSurvey(emptyProfile()).some((q) => q.id === "q6_emergency")).toBe(false);
-    const p = profile((p) => (p.medical.gastrostomy = true));
+    const p = profile((p) => (p.medical.tubeGastric = "day"));
     expect(buildSurvey(p).some((q) => q.id === "q6_emergency")).toBe(true);
   });
 

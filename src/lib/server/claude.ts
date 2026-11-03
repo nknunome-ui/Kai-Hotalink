@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { normalizeEvidence, normalizeProfile } from "@/lib/domain/profile";
 import { HttpError } from "./http";
+import { MEDICAL_CARE, MEDICAL_IDS, medicalItem, type MedicalCareId } from "@/lib/domain/medical";
 import { PROFILE_FIELDS, emptyProfile, type Evidence, type ProfileField, type ResidentProfile } from "@/lib/domain/types";
 
 // Claude は「資料を読んで項目を拾う」「自由記述を要約する」だけを担当する。
@@ -47,17 +48,15 @@ const PROFILE_SCHEMA = {
     medical: {
       type: "object",
       additionalProperties: false,
-      required: ["suction", "gastrostomy", "tracheostomy", "oxygen", "insulin", "urinaryCatheter", "dialysis", "pressureUlcer"],
-      properties: {
-        suction: { type: "string", enum: ["none", "day", "night", "both"], description: "たん吸引が必要な時間帯" },
-        gastrostomy: { type: "boolean", description: "胃ろう・経管栄養" },
-        tracheostomy: { type: "boolean", description: "気管切開" },
-        oxygen: { type: "boolean", description: "在宅酸素療法" },
-        insulin: { type: "boolean", description: "インスリン注射" },
-        urinaryCatheter: { type: "boolean", description: "尿道カテーテル留置" },
-        dialysis: { type: "boolean", description: "人工透析" },
-        pressureUlcer: { type: "boolean", description: "褥瘡の処置が必要" },
-      },
+      required: [...MEDICAL_IDS],
+      properties: Object.fromEntries(
+        MEDICAL_CARE.map((m) => [
+          m.id,
+          m.night
+            ? { type: "string", enum: ["none", "day", "night"], description: `${m.label}: none=不要, day=日中のみ必要, night=夜間（20時〜6時）も必要` }
+            : { type: "string", enum: ["none", "day"], description: `${m.label}: none=不要, day=必要` },
+        ]),
+      ),
     },
     physical: {
       type: "object",
@@ -106,7 +105,7 @@ const PROFILE_SCHEMA = {
         additionalProperties: false,
         required: ["field", "quote", "source"],
         properties: {
-          field: { type: "string", enum: [...PROFILE_FIELDS], description: "項目名（suction などは medical の中の項目）" },
+          field: { type: "string", enum: [...PROFILE_FIELDS], description: "項目名（suctionOral などは medical の中の項目）" },
           quote: { type: "string", description: "根拠になった資料の記述を、原文のまま80字以内で抜き書き" },
           source: { type: "string", description: "資料のファイル名。スタッフの追記なら「スタッフの追記」" },
         },
@@ -233,6 +232,34 @@ export async function summarizePastExperience(text: string): Promise<string> {
 
 // ---------- ダミー（APIキー未設定時） ----------
 
+const MOCK_MEDICAL_WORDS: [MedicalCareId, string[]][] = [
+  ["suctionTracheal", ["カニューレ", "気管内吸引"]],
+  ["suctionOral", ["吸引"]],
+  ["tppv", ["TPPV", "気管切開型"]],
+  ["nppv", ["NPPV", "人工呼吸器"]],
+  ["tracheostomy", ["気管切開"]],
+  ["oxygen", ["酸素"]],
+  ["tubeGastric", ["胃ろう", "胃瘻"]],
+  ["tubeEnteric", ["腸ろう", "腸瘻"]],
+  ["tubeNasal", ["経鼻"]],
+  ["ivh", ["IVH", "中心静脈"]],
+  ["infusion", ["点滴"]],
+  ["urinaryCatheter", ["カテーテル", "バルーン"]],
+  ["stoma", ["ストーマ", "人工肛門"]],
+  ["urostomy", ["人工膀胱"]],
+  ["disimpaction", ["摘便", "浣腸"]],
+  ["insulin", ["インスリン"]],
+  ["glucose", ["血糖"]],
+  ["pressureUlcer", ["褥瘡"]],
+  ["hemodialysis", ["人工透析", "血液透析"]],
+  ["capd", ["腹膜透析", "CAPD"]],
+  ["cancerPain", ["麻薬", "がん性疼痛"]],
+  ["infection", ["MRSA", "結核", "疥癬"]],
+  ["pacemaker", ["ペースメーカー"]],
+  ["terminalCare", ["看取り", "ターミナル"]],
+  ["intractable", ["ALS", "難病"]],
+];
+
 function mockExtract(notes: string): ExtractionResult {
   const p = emptyProfile();
   const evidence: Evidence[] = [];
@@ -248,14 +275,13 @@ function mockExtract(notes: string): ExtractionResult {
   if (care) p.careLevel = (Number(care[1].replace(/[１-５]/, (d) => String("１２３４５".indexOf(d) + 1))) + 2) as ResidentProfile["careLevel"];
   else if (has("要支援2", "要支援２")) p.careLevel = 2;
   else if (has("要支援")) p.careLevel = 1;
-  if (has("吸引")) p.medical.suction = has("夜間") ? "night" : "day";
-  p.medical.gastrostomy = has("胃ろう", "胃瘻", "経管");
-  p.medical.oxygen = has("酸素");
-  p.medical.insulin = has("インスリン");
-  p.medical.dialysis = has("透析");
-  p.medical.urinaryCatheter = has("カテーテル", "バルーン");
-  p.medical.tracheostomy = has("気管切開");
-  p.medical.pressureUlcer = has("褥瘡");
+  // 医療的ケア: キーワードを含む文があれば必要とし、その文に「夜間」があれば夜間も必要とする
+  for (const [id, words] of MOCK_MEDICAL_WORDS) {
+    const sentence = sentences.find((x) => words.some((w) => x.includes(w)));
+    if (!sentence) continue;
+    p.medical[id] = medicalItem(id).night && sentence.includes("夜間") ? "night" : "day";
+    cite(id, words.find((w) => sentence.includes(w))!);
+  }
   if (has("寝たきり")) p.physical.mobility = "bedridden";
   else if (has("全介助")) p.physical.mobility = "full";
   else if (has("一部介助")) p.physical.mobility = "partial";
@@ -269,14 +295,6 @@ function mockExtract(notes: string): ExtractionResult {
   p.cognition.nightDisturbance = has("昼夜逆転", "不穏");
   const KEYWORDS: [ProfileField, string[]][] = [
     ["careLevel", ["要介護", "要支援"]],
-    ["suction", ["吸引"]],
-    ["gastrostomy", ["胃ろう", "胃瘻", "経管"]],
-    ["oxygen", ["酸素"]],
-    ["insulin", ["インスリン"]],
-    ["dialysis", ["透析"]],
-    ["urinaryCatheter", ["カテーテル", "バルーン"]],
-    ["tracheostomy", ["気管切開"]],
-    ["pressureUlcer", ["褥瘡"]],
     ["mobility", ["寝たきり", "全介助", "一部介助", "見守り"]],
     ["fallsLastYear", ["転倒"]],
     ["dementiaLevel", ["認知症"]],

@@ -34,7 +34,7 @@ describe("extractProfile（Claude）", () => {
         JSON.stringify({
           age: 85,
           careLevel: 5,
-          medical: { suction: "night", gastrostomy: false, tracheostomy: false, oxygen: false, insulin: true, urinaryCatheter: false, dialysis: false, pressureUlcer: false },
+          medical: { suctionOral: "night", insulin: "day", tubeGastric: "none" },
           physical: { mobility: "partial", fallsLastYear: 2 },
           cognition: { dementiaLevel: 2, wandering: false, aggression: false, careRefusal: false, nightDisturbance: true },
           summary: "高血圧",
@@ -51,7 +51,7 @@ describe("extractProfile（Claude）", () => {
     // structured outputs の制約（minimum/maximum 不可、object は additionalProperties: false）
     const schema = JSON.stringify(params.output_config.format.schema);
     expect(schema).not.toMatch(/"minimum"|"maximum"/);
-    expect(r.profile).toMatchObject({ age: 85, careLevel: 5, medical: { suction: "night", insulin: true } });
+    expect(r.profile).toMatchObject({ age: 85, careLevel: 5, medical: { suctionOral: "night", insulin: "day", tubeGastric: "none", oxygen: "none" } });
     expect(r.uncertain).toEqual(["服薬の詳細"]);
     expect(r.evidence).toEqual([{ field: "careLevel", quote: "要介護3", source: "主治医意見書.pdf" }]);
   });

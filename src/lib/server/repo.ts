@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { defaultSettings } from "@/lib/domain/presets";
+import { defaultSettings, sanitizeAcceptance } from "@/lib/domain/presets";
+import { normalizeEvidence, normalizeProfile } from "@/lib/domain/profile";
 import type {
   JudgmentRecord,
   Resident,
@@ -34,7 +35,16 @@ function toResident(id: string, data: StoredResident): Resident {
     void _omit;
     publicSurvey = s;
   }
-  return { id, ...rest, survey: publicSurvey };
+  // 入居者の状態は、以前の形（医療的ケアの項目が少ない形）で保存されていても新しい形に読み替える
+  const profile = rest.profile ? normalizeProfile(rest.profile) : null;
+  const extraction = rest.extraction
+    ? {
+        ...rest.extraction,
+        evidence: normalizeEvidence(rest.extraction.evidence),
+        profile: rest.extraction.profile ? normalizeProfile(rest.extraction.profile) : undefined,
+      }
+    : null;
+  return { id, ...rest, profile, extraction, survey: publicSurvey };
 }
 
 // ---------- 設定 ----------
@@ -44,7 +54,12 @@ export async function getSettings(fid: string): Promise<SettingsRecord> {
   const data = snap.data();
   if (!data?.settings) return { settings: defaultSettings(), version: 0, updatedAt: null };
   return {
-    settings: { ...defaultSettings(), ...data.settings, acceptance: { ...defaultSettings().acceptance, ...data.settings.acceptance } },
+    // 以前の形で保存された受け入れ範囲も、ここで新しい形に読み替える
+    settings: {
+      ...defaultSettings(),
+      ...data.settings,
+      acceptance: data.settings.acceptance ? sanitizeAcceptance(data.settings.acceptance) : defaultSettings().acceptance,
+    },
     version: data.settingsVersion ?? 0,
     updatedAt: data.updatedAt ?? null,
   };

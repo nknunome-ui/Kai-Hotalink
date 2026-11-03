@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 import { GradeLantern } from "@/components/GradeLantern";
 import { Button, Field, Input, Notice, Segmented, Select, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
+import {
+  MEDICAL_CARE,
+  MEDICAL_GROUPS,
+  type CareCapacities,
+  type CareCapacity,
+  type MedicalCapability,
+  type MedicalCareId,
+  type NurseStaffing,
+} from "@/lib/domain/medical";
 import { PRESETS } from "@/lib/domain/presets";
 import type { SettingsHistoryEntry, SettingsRecord } from "@/lib/domain/records";
 import {
@@ -15,7 +24,6 @@ import {
   type GapSensitivity,
   type Grade,
   type PresetId,
-  type SuctionCapability,
   type Thresholds,
 } from "@/lib/domain/types";
 
@@ -29,19 +37,7 @@ interface SimRow {
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
-const MEDICAL: [keyof Acceptance, string][] = [
-  ["gastrostomy", "胃ろう・経管栄養"],
-  ["tracheostomy", "気管切開"],
-  ["oxygen", "在宅酸素"],
-  ["insulin", "インスリン注射"],
-  ["urinaryCatheter", "尿道カテーテル"],
-  ["dialysis", "人工透析"],
-  ["pressureUlcer", "褥瘡の処置"],
-];
-
-const SUPPORT: [keyof Acceptance, string][] = [
-  ["nightNurse", "夜間も看護師が常駐"],
-  ["endOfLifeCare", "看取りに対応"],
+const SUPPORT: ["contactsMinorChanges" | "routineReport", string][] = [
   ["contactsMinorChanges", "小さな変化でもご家族に連絡"],
   ["routineReport", "月1回程度の定期報告"],
 ];
@@ -64,9 +60,10 @@ function strictnessOf(t: Thresholds): Strictness | "custom" {
 /** 受け入れていない項目の一覧（設定画面の上に出す） */
 function refusedItems(acc: Acceptance): string[] {
   const out: string[] = [];
-  if (acc.suction === "none") out.push("たん吸引が必要な方");
-  else if (acc.suction === "day") out.push("夜間のたん吸引が必要な方");
-  for (const [k, l] of MEDICAL) if (!acc[k]) out.push(`${l}の方`);
+  for (const m of MEDICAL_CARE) {
+    if (acc.medical[m.id] === "no") out.push(`${m.label}が必要な方`);
+    else if (acc.medical[m.id] === "day") out.push(`夜間の${m.label}が必要な方`);
+  }
   if (acc.maxCareLevel < 7) out.push(`${CARE_LEVEL_LABELS[(acc.maxCareLevel + 1) as CareLevel]}以上の方`);
   if (acc.maxDementiaLevel < 4) out.push(`認知症が「${DEMENTIA_LABELS[(acc.maxDementiaLevel + 1) as DementiaLevel].split("（")[0]}」以上の方`);
   if (!acc.acceptsBedridden) out.push("寝たきりの方");
@@ -108,6 +105,75 @@ function YesNo({ label, value, onChange }: { label: string; value: boolean; onCh
         { value: "no", label: "受け入れない", tone: "no" },
       ]}
     />
+  );
+}
+
+/** 人数に上限があるケアの一覧と、追加・削除 */
+function CapacityEditor({ acc, onChange }: { acc: Acceptance; onChange: (c: CareCapacities) => void }) {
+  const entries = MEDICAL_CARE.filter((m) => acc.capacity[m.id]);
+  const addable = MEDICAL_CARE.filter((m) => !acc.capacity[m.id] && acc.medical[m.id] !== "no");
+  const set = (id: MedicalCareId, c: CareCapacity | null) => {
+    const next = { ...acc.capacity };
+    if (c) next[id] = c;
+    else delete next[id];
+    onChange(next);
+  };
+  return (
+    <div>
+      {entries.length === 0 && <p className="mb-3 text-[14px] text-ink-soft">いまは人数の上限を設けていません。</p>}
+      {entries.map((m) => {
+        const c = acc.capacity[m.id]!;
+        const full = c.limit > 0 && c.current >= c.limit;
+        return (
+          <div key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-3 last:border-0">
+            <p className="min-w-0 flex-1 text-[15px] font-bold">
+              {m.label}
+              {full && <span className="ml-2 rounded-full bg-alert-soft px-2 py-0.5 text-[12px] text-alert">枠がいっぱい</span>}
+            </p>
+            <label className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[14px]">
+              上限
+              <Input
+                type="number"
+                min={0}
+                style={{ width: "5.5rem" }}
+                value={c.limit}
+                onChange={(e) => set(m.id, { ...c, limit: Math.max(0, Number(e.target.value) || 0) })}
+              />
+              名
+            </label>
+            <label className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[14px]">
+              いま
+              <Input
+                type="number"
+                min={0}
+                style={{ width: "5.5rem" }}
+                value={c.current}
+                onChange={(e) => set(m.id, { ...c, current: Math.max(0, Number(e.target.value) || 0) })}
+              />
+              名
+            </label>
+            <Button variant="danger" className="min-h-9 px-3 text-[13px]" onClick={() => set(m.id, null)}>
+              外す
+            </Button>
+          </div>
+        );
+      })}
+      {addable.length > 0 && (
+        <Select
+          aria-label="上限を設けるケアを追加"
+          className="mt-3 w-auto"
+          value=""
+          onChange={(e) => e.target.value && set(e.target.value as MedicalCareId, { limit: 5, current: 0 })}
+        >
+          <option value="">＋ 上限を設けるケアを追加</option>
+          {addable.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </Select>
+      )}
+    </div>
   );
 }
 
@@ -218,24 +284,73 @@ export default function SettingsPage() {
           </Field>
         </Card>
 
-        <Card title="医療的ケア" note="対応できる医療的ケアを選んでください。">
-          <Row label="たん吸引">
-            <Segmented<SuctionCapability>
-              label="たん吸引"
-              value={acc.suction}
-              onChange={(v) => setAcc({ suction: v })}
+        <Card title="看護師と医療的ケア" note="受け入れられない医療的ケアが必要な方は、判定が D（2つ以上なら E）になります。">
+          <Row label="看護師の配置">
+            <Segmented<NurseStaffing>
+              label="看護師の配置"
+              value={acc.nurseStaffing}
+              onChange={(v) => setAcc({ nurseStaffing: v })}
               options={[
-                { value: "both", label: "日中・夜間" },
+                { value: "24h", label: "24時間常駐" },
                 { value: "day", label: "日中のみ" },
-                { value: "none", label: "対応しない", tone: "no" },
+                { value: "none", label: "配置なし", tone: "no" },
               ]}
             />
           </Row>
-          {MEDICAL.map(([k, l]) => (
-            <Row key={k} label={l}>
-              <YesNo label={l} value={acc[k] as boolean} onChange={(v) => setAcc({ [k]: v })} />
-            </Row>
-          ))}
+          {acc.nurseStaffing !== "24h" && (
+            <p className="mb-2 rounded-2xl bg-brand-tint px-3 py-2 text-[13px]">
+              夜間は看護師がいない設定です。夜間の医療的ケアは、研修を受けた介護職などで対応できる項目だけ「日中・夜間」にしてください。
+            </p>
+          )}
+          <div className="mt-2 space-y-2">
+            {MEDICAL_GROUPS.map((g) => {
+              const items = MEDICAL_CARE.filter((m) => m.group === g.id);
+              const accepted = items.filter((m) => acc.medical[m.id] !== "no").length;
+              return (
+                <details key={g.id} className="group rounded-2xl bg-paper">
+                  <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                    <span className="text-[15px] font-bold">{g.label}</span>
+                    <span className="text-[13px] text-ink-soft">
+                      {items.length}項目中 <b className="text-brand-strong">{accepted}</b>項目を受け入れ
+                      <span className="ml-2 inline-block transition-transform group-open:rotate-180" aria-hidden>
+                        ▾
+                      </span>
+                    </span>
+                  </summary>
+                  <div className="px-4 pb-2">
+                    {items.map((m) => (
+                      <Row key={m.id} label={m.label}>
+                        <Segmented<MedicalCapability>
+                          label={m.label}
+                          value={acc.medical[m.id]}
+                          onChange={(v) => setAcc({ medical: { ...acc.medical, [m.id]: v } })}
+                          options={
+                            m.night
+                              ? [
+                                  { value: "both", label: "日中・夜間" },
+                                  { value: "day", label: "日中のみ" },
+                                  { value: "no", label: "受け入れない", tone: "no" },
+                                ]
+                              : [
+                                  { value: "both", label: "受け入れる" },
+                                  { value: "no", label: "受け入れない", tone: "no" },
+                                ]
+                          }
+                        />
+                      </Row>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card
+          title="受け入れ枠（任意）"
+          note="設備や職員の都合で人数に上限があるケアだけ設定します。いまの入居者数が上限に達していると、「枠がいっぱい」として判定に出ます。"
+        >
+          <CapacityEditor acc={acc} onChange={(capacity) => setAcc({ capacity })} />
         </Card>
 
         <Card title="介護度・認知症" note="どの程度の方まで受け入れるかを選んでください。">

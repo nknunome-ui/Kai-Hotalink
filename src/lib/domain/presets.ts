@@ -1,3 +1,4 @@
+import { normalizeCapabilities, normalizeCapacities } from "./medical";
 import type { Acceptance, FacilitySettings, PresetId, Thresholds, Weights } from "./types";
 
 export const PRESETS: Record<
@@ -25,22 +26,36 @@ export const PRESETS: Record<
 };
 
 export function defaultAcceptance(): Acceptance {
+  // よくある有料老人ホーム（看護師は日中のみ）を想定した初期値
+  const medical = normalizeCapabilities({
+    suctionOral: "day",
+    oxygen: "both",
+    tubeGastric: "both",
+    tubeEnteric: "both",
+    tubeNasal: "both",
+    infusion: "day",
+    urinaryCatheter: "both",
+    stoma: "both",
+    urostomy: "both",
+    disimpaction: "both",
+    insulin: "day",
+    glucose: "day",
+    pressureUlcer: "both",
+    woundCare: "both",
+    hemodialysis: "both",
+    cancerPain: "both",
+    pacemaker: "both",
+    terminalCare: "both",
+  });
   return {
-    suction: "day",
-    gastrostomy: true,
-    tracheostomy: false,
-    oxygen: true,
-    insulin: true,
-    urinaryCatheter: true,
-    dialysis: false,
-    pressureUlcer: true,
+    nurseStaffing: "day",
+    medical,
+    capacity: {},
     maxCareLevel: 7,
     acceptsBedridden: true,
     maxDementiaLevel: 3,
     acceptsWandering: true,
     acceptsAggression: false,
-    nightNurse: false,
-    endOfLifeCare: true,
     contactsMinorChanges: false,
     routineReport: true,
   };
@@ -80,8 +95,6 @@ export function validateSettings(s: FacilitySettings): string | null {
 export function sanitizeSettings(s: FacilitySettings): FacilitySettings | null {
   if (!s || typeof s !== "object") return null;
   const a = s.acceptance ?? ({} as FacilitySettings["acceptance"]);
-  const b = (v: unknown) => v === true;
-  const lvl = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
   return {
     facilityName: String(s.facilityName ?? "").slice(0, 100),
     preset: s.preset,
@@ -92,24 +105,29 @@ export function sanitizeSettings(s: FacilitySettings): FacilitySettings | null {
       cognition: Number(s.weights?.cognition),
     },
     thresholds: { a: Number(s.thresholds?.a), b: Number(s.thresholds?.b), c: Number(s.thresholds?.c) },
-    acceptance: {
-      suction: (["none", "day", "both"] as const).includes(a.suction) ? a.suction : "none",
-      gastrostomy: b(a.gastrostomy),
-      tracheostomy: b(a.tracheostomy),
-      oxygen: b(a.oxygen),
-      insulin: b(a.insulin),
-      urinaryCatheter: b(a.urinaryCatheter),
-      dialysis: b(a.dialysis),
-      pressureUlcer: b(a.pressureUlcer),
-      maxCareLevel: lvl(a.maxCareLevel, 7) as FacilitySettings["acceptance"]["maxCareLevel"],
-      acceptsBedridden: b(a.acceptsBedridden),
-      maxDementiaLevel: lvl(a.maxDementiaLevel, 4) as FacilitySettings["acceptance"]["maxDementiaLevel"],
-      acceptsWandering: b(a.acceptsWandering),
-      acceptsAggression: b(a.acceptsAggression),
-      nightNurse: b(a.nightNurse),
-      endOfLifeCare: b(a.endOfLifeCare),
-      contactsMinorChanges: b(a.contactsMinorChanges),
-      routineReport: b(a.routineReport),
-    },
+    acceptance: sanitizeAcceptance(a as unknown as Record<string, unknown>),
+  };
+}
+
+/**
+ * 受け入れ範囲を整える。以前の形（suction・各項目の true/false・nightNurse）で
+ * 保存された設定も、新しい形に置き換えて読む。
+ */
+export function sanitizeAcceptance(a: Record<string, unknown>): Acceptance {
+  const b = (v: unknown) => v === true;
+  const lvl = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
+  const legacy = !a.medical || typeof a.medical !== "object";
+  const staffing = (["24h", "day", "none"] as const).find((x) => x === a.nurseStaffing);
+  return {
+    nurseStaffing: staffing ?? (legacy ? (a.nightNurse === true ? "24h" : "day") : "day"),
+    medical: normalizeCapabilities(legacy ? null : a.medical, a),
+    capacity: normalizeCapacities(a.capacity),
+    maxCareLevel: lvl(a.maxCareLevel, 7) as Acceptance["maxCareLevel"],
+    acceptsBedridden: b(a.acceptsBedridden),
+    maxDementiaLevel: lvl(a.maxDementiaLevel, 4) as Acceptance["maxDementiaLevel"],
+    acceptsWandering: b(a.acceptsWandering),
+    acceptsAggression: b(a.acceptsAggression),
+    contactsMinorChanges: b(a.contactsMinorChanges),
+    routineReport: b(a.routineReport),
   };
 }

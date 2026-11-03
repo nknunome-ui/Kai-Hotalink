@@ -105,8 +105,8 @@ describe("入居判定の通しの流れ", () => {
   it("設定 → 登録 → AI読み取り → 確認 → アンケート → 判定", async () => {
     // 施設の設定（管理者）
     const s = defaultSettings("ひだまりの家");
-    s.acceptance.suction = "day";
-    s.acceptance.nightNurse = false;
+    s.acceptance.medical.suctionOral = "day";
+    s.acceptance.nurseStaffing = "day";
     const saved = await json(await settings.PUT(req("admin-a", { settings: s }, "PUT")));
     expect(saved.body.version).toBe(1);
     const h = await json(await history.GET(req("staff-a")));
@@ -117,11 +117,11 @@ describe("入居判定の通しの流れ", () => {
     await resident.PATCH(req("staff-a", { staffNotes: "要介護3。夜間 吸引あり。転倒 2回。" }, "PATCH"), params({ id }));
     const ex = await json(await extract.POST(req("staff-a", {}), params({ id })));
     expect(ex.status).toBe(200);
-    expect(ex.body.resident.profile).toMatchObject({ careLevel: 5, medical: { suction: "night" }, physical: { fallsLastYear: 2 } });
+    expect(ex.body.resident.profile).toMatchObject({ careLevel: 5, medical: { suctionOral: "night" }, physical: { fallsLastYear: 2 } });
     expect(ex.body.resident.profileConfirmed).toBe(false);
     // 根拠（ダミーは追記からの抜き書き）と、AI が読み取った値を残す
     expect(ex.body.resident.extraction.evidence).toContainEqual(
-      expect.objectContaining({ field: "suction", source: "スタッフの追記" }),
+      expect.objectContaining({ field: "suctionOral", source: "スタッフの追記" }),
     );
     expect(ex.body.resident.extraction.profile).toEqual(ex.body.resident.profile);
 
@@ -129,7 +129,7 @@ describe("入居判定の通しの流れ", () => {
     expect((await judgeRoute.POST(req("staff-a", {}), params({ id }))).status).toBe(400);
 
     // スタッフが確認して修正（実は吸引は不要だった）
-    const fixed = { ...ex.body.resident.profile, medical: { ...ex.body.resident.profile.medical, suction: "none" } };
+    const fixed = { ...ex.body.resident.profile, medical: { ...ex.body.resident.profile.medical, suctionOral: "none" } };
     const patched = await json(await resident.PATCH(req("staff-a", { profile: fixed }, "PATCH"), params({ id })));
     expect(patched.body.resident.profileConfirmed).toBe(true);
 

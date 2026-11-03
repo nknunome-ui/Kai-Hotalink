@@ -83,6 +83,7 @@ function categoryWord(c: Category): string {
 function shortText(text: string): string {
   return text
     .split("が必要だが")[0]
-    .split("（")[0]
+    .replace(/（[^）]*）が受け入れ上限.*$/, "")
+    .replace(/の受け入れ枠がいっぱい.*$/, "の受け入れ枠")
     .replace(/に対応できない$|への対応が難しい$|の受け入れに対応していない$|が受け入れ範囲を超えている$/, "");
 }

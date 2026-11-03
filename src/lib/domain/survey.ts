@@ -1,6 +1,7 @@
 // 家族アンケートの設問定義。選択肢の値は内部コード、表示文はやわらかい表現にする。
 // 内部の値・変数名も、家族が開示請求で見ても困らない言葉にしている。
 
+import { MEDICAL_CARE } from "./medical";
 import type { ResidentProfile } from "./types";
 
 export interface SurveyOption {
@@ -126,8 +127,10 @@ const TAIL_QUESTIONS: SurveyQuestion[] = [
 /** 医療的ケアがあると急変時の設問を追加する（設問の動的生成） */
 export function needsEmergencyQuestion(profile: ResidentProfile | null): boolean {
   if (!profile) return false;
-  const m = profile.medical;
-  return m.suction !== "none" || m.gastrostomy || m.tracheostomy || m.oxygen;
+  // 呼吸・気道系か栄養・水分補給系のケアが必要な方は、急変時の対応を確認しておく
+  return MEDICAL_CARE.some(
+    (m) => (m.group === "respiratory" || m.group === "nutrition") && profile.medical[m.id] !== "none",
+  );
 }
 
 export function buildSurvey(profile: ResidentProfile | null): SurveyQuestion[] {

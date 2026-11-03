@@ -11,10 +11,9 @@ import {
   type Mobility,
   type ProfileField,
   type ResidentProfile,
-  type SuctionNeed,
 } from "./types";
+import { medicalItem, normalizeNeeds, type MedicalCareId } from "./medical";
 
-const SUCTION: SuctionNeed[] = ["none", "day", "night", "both"];
 const MOBILITY: Mobility[] = ["independent", "supervision", "partial", "full", "bedridden"];
 
 const bool = (v: unknown) => v === true;
@@ -28,7 +27,6 @@ export function normalizeProfile(input: unknown): ResidentProfile {
   const base = emptyProfile();
   if (!input || typeof input !== "object") return base;
   const i = input as Record<string, unknown>;
-  const m = (i.medical ?? {}) as Record<string, unknown>;
   const ph = (i.physical ?? {}) as Record<string, unknown>;
   const c = (i.cognition ?? {}) as Record<string, unknown>;
 
@@ -37,16 +35,7 @@ export function normalizeProfile(input: unknown): ResidentProfile {
   return {
     age,
     careLevel: intIn(i.careLevel, 0, 7, 0) as CareLevel,
-    medical: {
-      suction: SUCTION.includes(m.suction as SuctionNeed) ? (m.suction as SuctionNeed) : "none",
-      gastrostomy: bool(m.gastrostomy),
-      tracheostomy: bool(m.tracheostomy),
-      oxygen: bool(m.oxygen),
-      insulin: bool(m.insulin),
-      urinaryCatheter: bool(m.urinaryCatheter),
-      dialysis: bool(m.dialysis),
-      pressureUlcer: bool(m.pressureUlcer),
-    },
+    medical: normalizeNeeds(i.medical),
     physical: {
       mobility: MOBILITY.includes(ph.mobility as Mobility) ? (ph.mobility as Mobility) : "independent",
       fallsLastYear: intIn(ph.fallsLastYear, 0, 99, 0),
@@ -62,6 +51,12 @@ export function normalizeProfile(input: unknown): ResidentProfile {
   };
 }
 
+const LEGACY_FIELDS: Record<string, ProfileField> = {
+  suction: "suctionOral",
+  gastrostomy: "tubeGastric",
+  dialysis: "hemodialysis",
+};
+
 /** AI が返した根拠を、知っている項目だけ・短く整えて残す（1項目1件） */
 export function normalizeEvidence(input: unknown): Evidence[] {
   if (!Array.isArray(input)) return [];
@@ -69,7 +64,9 @@ export function normalizeEvidence(input: unknown): Evidence[] {
   const out: Evidence[] = [];
   for (const e of input) {
     if (!e || typeof e !== "object") continue;
-    const { field, quote, source } = e as Record<string, unknown>;
+    const { quote, source } = e as Record<string, unknown>;
+    // 以前の項目名（suction・gastrostomy・dialysis）で保存された根拠も読む
+    const field = LEGACY_FIELDS[String((e as Record<string, unknown>).field)] ?? (e as Record<string, unknown>).field;
     if (!PROFILE_FIELDS.includes(field as ProfileField) || seen.has(field as ProfileField)) continue;
     if (typeof quote !== "string" || !quote.trim()) continue;
     seen.add(field as ProfileField);
@@ -83,7 +80,13 @@ export function normalizeEvidence(input: unknown): Evidence[] {
 }
 
 const YES_NO = (v: boolean) => (v ? "あり" : "なし");
-const SUCTION_TEXT: Record<SuctionNeed, string> = { none: "不要", day: "日中のみ", night: "夜間", both: "日中・夜間" };
+
+/** 医療的ケアの必要度を表示用の文字にする */
+export function needText(id: MedicalCareId, need: ResidentProfile["medical"][MedicalCareId]): string {
+  if (need === "none") return "不要";
+  if (!medicalItem(id).night) return "必要";
+  return need === "night" ? "夜間も必要" : "日中のみ必要";
+}
 
 /** 項目の値を画面表示用の文字にする（AI の値と比べて見せるため） */
 export function fieldText(p: ResidentProfile, f: ProfileField): string {
@@ -92,26 +95,18 @@ export function fieldText(p: ResidentProfile, f: ProfileField): string {
       return p.age === null ? "不明" : `${p.age}歳`;
     case "careLevel":
       return CARE_LEVEL_LABELS[p.careLevel];
-    case "suction":
-      return SUCTION_TEXT[p.medical.suction];
     case "mobility":
       return MOBILITY_LABELS[p.physical.mobility];
     case "fallsLastYear":
       return `${p.physical.fallsLastYear}回`;
     case "dementiaLevel":
       return DEMENTIA_LABELS[p.cognition.dementiaLevel].replace(/（.*）/, "");
-    case "gastrostomy":
-    case "tracheostomy":
-    case "oxygen":
-    case "insulin":
-    case "urinaryCatheter":
-    case "dialysis":
-    case "pressureUlcer":
-      return YES_NO(p.medical[f]);
     case "wandering":
     case "aggression":
     case "careRefusal":
     case "nightDisturbance":
       return YES_NO(p.cognition[f]);
+    default:
+      return needText(f, p.medical[f]);
   }
 }

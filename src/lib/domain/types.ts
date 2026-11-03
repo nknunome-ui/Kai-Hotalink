@@ -1,4 +1,13 @@
 // Hotalink のドメイン型。サーバー・クライアント両方から使う純粋な型定義。
+import {
+  emptyNeeds,
+  MEDICAL_IDS,
+  type CareCapacities,
+  type MedicalCapabilities,
+  type MedicalCareId,
+  type MedicalNeeds,
+  type NurseStaffing,
+} from "./medical";
 
 /** 要介護度: 0=自立, 1-2=要支援1-2, 3-7=要介護1-5 */
 export type CareLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -13,11 +22,6 @@ export const CARE_LEVEL_LABELS: Record<CareLevel, string> = {
   6: "要介護4",
   7: "要介護5",
 };
-
-/** たん吸引が必要な時間帯 */
-export type SuctionNeed = "none" | "day" | "night" | "both";
-/** 施設がたん吸引に対応できる時間帯 */
-export type SuctionCapability = "none" | "day" | "both";
 
 export type Mobility =
   | "independent"
@@ -45,27 +49,6 @@ export const DEMENTIA_LABELS: Record<DementiaLevel, string> = {
   4: "専門医療が必要（M 程度）",
 };
 
-export interface MedicalNeeds {
-  suction: SuctionNeed;
-  gastrostomy: boolean; // 胃ろう・経管栄養
-  tracheostomy: boolean; // 気管切開
-  oxygen: boolean; // 在宅酸素
-  insulin: boolean; // インスリン注射
-  urinaryCatheter: boolean; // 尿道カテーテル
-  dialysis: boolean; // 人工透析
-  pressureUlcer: boolean; // 褥瘡の処置
-}
-
-export const MEDICAL_ITEM_LABELS: Record<Exclude<keyof MedicalNeeds, "suction">, string> = {
-  gastrostomy: "胃ろう・経管栄養",
-  tracheostomy: "気管切開",
-  oxygen: "在宅酸素",
-  insulin: "インスリン注射",
-  urinaryCatheter: "尿道カテーテル",
-  dialysis: "人工透析",
-  pressureUlcer: "褥瘡の処置",
-};
-
 /** 入居者の状態。AI が資料から抽出し、施設が確認・修正する。 */
 export interface ResidentProfile {
   age: number | null;
@@ -90,16 +73,7 @@ export function emptyProfile(): ResidentProfile {
   return {
     age: null,
     careLevel: 0,
-    medical: {
-      suction: "none",
-      gastrostomy: false,
-      tracheostomy: false,
-      oxygen: false,
-      insulin: false,
-      urinaryCatheter: false,
-      dialysis: false,
-      pressureUlcer: false,
-    },
+    medical: emptyNeeds(),
     physical: { mobility: "independent", fallsLastYear: 0 },
     cognition: {
       dementiaLevel: 0,
@@ -114,21 +88,17 @@ export function emptyProfile(): ResidentProfile {
 
 /** 施設の受け入れ範囲（足切り条件の元になる） */
 export interface Acceptance {
-  suction: SuctionCapability;
-  gastrostomy: boolean;
-  tracheostomy: boolean;
-  oxygen: boolean;
-  insulin: boolean;
-  urinaryCatheter: boolean;
-  dialysis: boolean;
-  pressureUlcer: boolean;
+  /** 看護師の配置体制 */
+  nurseStaffing: NurseStaffing;
+  /** 医療的ケアごとの受け入れ（日中・夜間） */
+  medical: MedicalCapabilities;
+  /** 人数に上限がある医療的ケア（任意） */
+  capacity: CareCapacities;
   maxCareLevel: CareLevel;
   acceptsBedridden: boolean;
   maxDementiaLevel: DementiaLevel;
   acceptsWandering: boolean;
   acceptsAggression: boolean;
-  nightNurse: boolean; // 夜間の看護師常駐
-  endOfLifeCare: boolean; // 看取り対応
   contactsMinorChanges: boolean; // 小さな変化でも家族に連絡する体制
   routineReport: boolean; // 定期報告（月1回程度）を行っている
 }
@@ -212,18 +182,11 @@ export interface JudgmentResult {
   surveyAnswered: boolean;
 }
 
-/** AI が根拠を示す対象の項目（判定に使う項目） */
-export const PROFILE_FIELDS = [
+/** AI が根拠を示す対象の項目（判定に使う項目。医療的ケアは medical.ts の項目 ID） */
+export const PROFILE_FIELDS: ProfileField[] = [
   "age",
   "careLevel",
-  "suction",
-  "gastrostomy",
-  "tracheostomy",
-  "oxygen",
-  "insulin",
-  "urinaryCatheter",
-  "dialysis",
-  "pressureUlcer",
+  ...MEDICAL_IDS,
   "mobility",
   "fallsLastYear",
   "dementiaLevel",
@@ -231,8 +194,18 @@ export const PROFILE_FIELDS = [
   "aggression",
   "careRefusal",
   "nightDisturbance",
-] as const;
-export type ProfileField = (typeof PROFILE_FIELDS)[number];
+];
+export type ProfileField =
+  | "age"
+  | "careLevel"
+  | MedicalCareId
+  | "mobility"
+  | "fallsLastYear"
+  | "dementiaLevel"
+  | "wandering"
+  | "aggression"
+  | "careRefusal"
+  | "nightDisturbance";
 
 /** AI が項目の値を決めた根拠（資料からの抜き書き） */
 export interface Evidence {
@@ -240,3 +213,8 @@ export interface Evidence {
   quote: string;
   source: string;
 }
+
+/** 夜間も看護師がいるか（ご家族への説明・同意書の文案に使う） */
+export const hasNightNurse = (acc: Acceptance) => acc.nurseStaffing === "24h";
+/** 看取りに対応しているか */
+export const offersEndOfLife = (acc: Acceptance) => acc.medical.terminalCare !== "no";
