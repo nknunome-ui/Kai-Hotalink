@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -200,18 +201,18 @@ export function Segmented<T extends string | number>({
   );
 }
 
-/** ロゴ: ほたるの光をイメージした丸いマークと名前 */
+/** ロゴ: ほたるのキャラクターと「HotaLink」、キャッチコピー入りの画像（public/logo.png、386×92） */
 export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   const lg = size === "lg";
   return (
-    <span className="inline-flex items-center gap-2">
-      <svg viewBox="0 0 32 32" className={lg ? "size-10" : "size-7"} aria-hidden>
-        <circle cx="16" cy="16" r="15" fill="var(--color-brand-soft)" />
-        <circle cx="16" cy="16" r="9" fill="var(--color-brand)" />
-        <circle cx="13" cy="13" r="3" fill="#fff" opacity="0.85" />
-      </svg>
-      <span className={cx("font-bold tracking-wide text-brand-strong", lg ? "text-[32px]" : "text-[22px]")}>Hotalink</span>
-    </span>
+    <Image
+      src="/logo.png"
+      alt="HotaLink 家族と施設 共にささえる 想いをつなぐ"
+      width={386}
+      height={92}
+      priority
+      className={lg ? "h-auto w-[300px] max-w-full" : "h-10 w-auto"}
+    />
   );
 }
 
