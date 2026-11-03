@@ -264,7 +264,13 @@ export async function saveJudgment(
   const batch = db().batch();
   batch.set(ref, record);
   batch.update(residents(staff.facilityId).doc(rid), {
-    latestJudgment: { id: ref.id, grade: result.grade, riskScore: result.riskScore, at: record.createdAt },
+    latestJudgment: {
+      id: ref.id,
+      grade: result.grade,
+      riskScore: result.riskScore,
+      at: record.createdAt,
+      ...(result.relation ? { relationSignal: result.relation.signal } : {}),
+    },
     updatedAt: record.createdAt,
   });
   await batch.commit();

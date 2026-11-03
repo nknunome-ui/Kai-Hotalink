@@ -4,6 +4,7 @@
 // 家族の回答（期待値のずれ）は ABCDE に入れず、別枠で返す。
 
 import type { Interview } from "./interview";
+import { relationRisk } from "./relation";
 import { MEDICAL_CARE, neededItems } from "./medical";
 import {
   CARE_LEVEL_LABELS,
@@ -629,5 +630,6 @@ export function judge({ residentName, profile: raw, settings, answers, interview
     wishes,
     documents,
     surveyAnswered: answers !== null,
+    relation: relationRisk({ interview, answers, profile, gaps: allGaps }),
   };
 }
