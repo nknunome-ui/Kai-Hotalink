@@ -91,21 +91,28 @@ function Survey() {
     <Frame facility={data.facilityName}>
       <h1 className="mb-3 text-[24px] font-bold leading-snug">{data.residentName} 様のご入居にあたってのアンケート</h1>
       <p className="mb-2 text-[16px] leading-relaxed text-ink-soft">
-        ご家族のお考えやご希望をうかがい、ご入居前のご説明に役立てるためのものです。正解や間違いはありません。思ったとおりにお答えください。
+        ご本人の今のご様子と、ご家族のお考えやご希望をうかがい、ご入居前のご説明と、施設での受け入れの準備に役立てるためのものです。正解や間違いはありません。思ったとおりにお答えください。
       </p>
-      <p className="mb-8 text-[14px] text-mute">所要時間は5分ほどです。</p>
+      <p className="mb-8 text-[14px] text-mute">所要時間は5〜10分ほどです。ご本人の状態は、おおよそで大丈夫です。</p>
 
       <form onSubmit={submit} className="space-y-6">
         {data.questions.map((q, i) => (
-          <QuestionCard
-            key={q.id}
-            n={i + 1}
-            q={q}
-            value={answers[q.id]}
-            follow={q.followUp ? (answers[q.followUp.id] as string | undefined) : undefined}
-            onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
-            onFollow={(v) => q.followUp && setAnswers((a) => ({ ...a, [q.followUp!.id]: v }))}
-          />
+          <div key={q.id} className="space-y-3">
+            {q.section && (
+              <h2 className="flex items-center gap-2 pt-4 text-[19px] font-bold text-brand-strong">
+                <span className="h-5 w-1.5 rounded-full bg-brand" aria-hidden />
+                {q.section}
+              </h2>
+            )}
+            <QuestionCard
+              n={i + 1}
+              q={q}
+              value={answers[q.id]}
+              follow={q.followUp ? (answers[q.followUp.id] as string | undefined) : undefined}
+              onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+              onFollow={(v) => q.followUp && setAnswers((a) => ({ ...a, [q.followUp!.id]: v }))}
+            />
+          </div>
         ))}
 
         <div className="sticky bottom-0 -mx-4 border-t border-line bg-paper/95 px-4 py-4 backdrop-blur">
@@ -168,7 +175,15 @@ function QuestionCard({
         <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-strong text-[15px] text-white">{n}</span>
         <span>{q.text}</span>
       </p>
-      {q.type === "text" ? (
+      {q.type === "text" && q.short ? (
+        <input
+          type="text"
+          maxLength={200}
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          className="min-h-12 w-full rounded-2xl border-2 border-line px-3 py-2 text-[16px] focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand-tint"
+        />
+      ) : q.type === "text" ? (
         <textarea
           rows={4}
           maxLength={2000}

@@ -160,18 +160,28 @@ describe("入居判定の通しの流れ", () => {
     const sv = await json(await survey.GET(req(null), params({ token })));
     expect(sv.body).toMatchObject({ facilityName: "ひだまりの家", residentName: "山田 花子", submitted: false });
     expect(sv.body.questions.map((q: { id: string }) => q.id)).not.toContain("q6_emergency");
-    expect(JSON.stringify(sv.body)).not.toContain("careLevel"); // 状態は家族側に返さない
+    // 状態は家族側に返さない（設問 ID の f_careLevel は除き、状態のキーそのものが無いこと）
+    expect(JSON.stringify(sv.body)).not.toContain('"careLevel"');
+    expect(JSON.stringify(sv.body)).not.toContain('"profile"');
 
     // 不正な回答は弾く、正しい回答は1回だけ受け付ける
-    expect((await survey.POST(req(null, { answers: { q1_expectation: ["safety"] } }), params({ token }))).status).toBe(400);
+    expect((await survey.POST(req(null, { answers: { f_relation: "child" } }), params({ token }))).status).toBe(400);
     const answers = {
-      q1_expectation: ["safety"],
-      q2_habits: "withinRules",
-      q3_falls: "noInjury",
-      q4_contact: ["incident", "everyChange"],
-      q5_endOfLife: "consult",
-      q7_differentCare: "explain",
-      q8_pastExperience: "前の施設では連絡が遅かった",
+      f_applicantName: "山田 太郎",
+      f_relation: "child",
+      f_contact: "090-0000-0000",
+      f_otherFamily: "involved",
+      f_careLevel: "3", // ご家族は要介護1と思っている（資料では要介護3）
+      f_mobility: "walk",
+      f_eating: "self",
+      f_toilet: "toilet",
+      f_cognition: "clear",
+      f_caregiver: "self",
+      f_reason: "仕事と介護の両立が難しくなった",
+      f_endOfLife: "natural",
+      f_reportFrequency: "daily",
+      f_priority: "absoluteSafety",
+      f_requests: "前の施設では連絡が遅かった",
       unknownKey: "捨てられる",
     };
     expect((await survey.POST(req(null, { answers }), params({ token }))).status).toBe(200);
@@ -182,8 +192,10 @@ describe("入居判定の通しの流れ", () => {
     expect(j.status).toBe(200);
     const result = j.body.judgment.result;
     expect(result.grade).toBe("B");
-    expect(result.gaps.map((g: { questionId: string }) => g.questionId)).toContain("q3_falls");
-    expect(result.wishes).toContain("ケアの提案は、理由を十分に説明してから決めてほしい");
+    const gapIds = result.gaps.map((g: { questionId: string }) => g.questionId);
+    expect(gapIds).toEqual(expect.arrayContaining(["f_careLevel", "f_priority", "f_reportFrequency"]));
+    expect(result.gaps.find((g: { questionId: string }) => g.questionId === "f_careLevel")).toMatchObject({ kind: "perception", level: "大" });
+    expect(result.wishes).toContain("お申込み：山田 太郎（子）・連絡先：090-0000-0000");
     expect(result.documents.map((d: { kind: string }) => d.kind)).toEqual(expect.arrayContaining(["fall-consent", "special-clauses"]));
     expect(j.body.judgment.settingsVersion).toBe(1);
     expect(j.body.judgment.pastExperienceSummary).toContain("連絡が遅かった");

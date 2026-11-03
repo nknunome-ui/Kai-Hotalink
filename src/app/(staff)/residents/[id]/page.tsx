@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { JudgmentReport, JudgmentSummary } from "@/components/JudgmentPanel";
 import { ProfileForm } from "@/components/ProfileForm";
+import { SurveyQr } from "@/components/SurveyQr";
 import { Button, Check, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { clientStorage, storageErrorMessage } from "@/lib/client/firebase";
@@ -554,7 +555,7 @@ function SurveyStep({
   return (
     <Step n={4} title="家族アンケート" status={status} {...stepProps("survey", progress)}>
       <p className="mb-4 text-[14px] text-ink-soft">
-        URLを発行して、ご家族にメールやLINEで送ってください。ログインなしで、スマホから回答できます。
+        URLを発行して、ご家族にメールやLINEで送るか、面談の場で QR コードを読み取ってもらってください。ログインなしで、スマホから回答できます。
         {!s && !resident.profileConfirmed && " 先に 2 の状態を保存しておくと、医療的ケアに応じた設問が自動で追加されます。"}
       </p>
       {hasDynamic && !s?.submittedAt && (
@@ -563,7 +564,7 @@ function SurveyStep({
 
       {url && (
         <div className="mb-4 rounded-2xl border-2 border-brand-soft bg-brand-tint p-3">
-          <p className="mb-2 text-[13px] font-semibold">ご家族に送るURL（この画面を閉じると再表示できません）</p>
+          <p className="mb-2 text-[13px] font-semibold">ご家族に送るURL・QR コード（この画面を閉じると再表示できません）</p>
           <div className="flex flex-wrap gap-2">
             <input readOnly value={url} className="min-w-0 flex-1 rounded-xl border-2 border-line bg-sheet px-3 py-1.5 text-[13px]" onFocus={(e) => e.target.select()} />
             <Button
@@ -576,6 +577,9 @@ function SurveyStep({
             >
               {copied ? "コピーしました" : "コピー"}
             </Button>
+          </div>
+          <div className="mt-3 border-t border-brand-soft pt-3">
+            <SurveyQr url={url} />
           </div>
         </div>
       )}
