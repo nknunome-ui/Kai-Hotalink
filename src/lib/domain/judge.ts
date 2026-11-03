@@ -3,11 +3,13 @@
 // 同じ入力なら必ず同じ結果になり、判定が低い原因を項目単位で示せる。
 // 家族の回答（期待値のずれ）は ABCDE に入れず、別枠で返す。
 
+import { MEDICAL_CARE, neededItems } from "./medical";
 import {
   CARE_LEVEL_LABELS,
   DEMENTIA_LABELS,
-  MEDICAL_ITEM_LABELS,
+  hasNightNurse,
   MOBILITY_LABELS,
+  offersEndOfLife,
   type Acceptance,
   type Category,
   type FacilitySettings,
@@ -20,19 +22,6 @@ import {
   type ResidentProfile,
 } from "./types";
 import { buildSurvey, labelOf, type SurveyAnswers } from "./survey";
-
-type MedicalItem = keyof typeof MEDICAL_ITEM_LABELS;
-const MEDICAL_ITEMS = Object.keys(MEDICAL_ITEM_LABELS) as MedicalItem[];
-
-const MEDICAL_POINTS: Record<MedicalItem, number> = {
-  gastrostomy: 3,
-  tracheostomy: 4,
-  dialysis: 3,
-  oxygen: 2,
-  insulin: 2,
-  urinaryCatheter: 1,
-  pressureUlcer: 2,
-};
 
 const MOBILITY_POINTS = {
   independent: 0,
@@ -50,29 +39,31 @@ export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
   const out: Reason[] = [];
   const add = (category: Category, text: string, action: string) => out.push({ category, impact: "knockout", text, action });
 
-  const s = p.medical.suction;
-  if (s !== "none") {
-    if (acc.suction === "none") {
+  for (const item of MEDICAL_CARE) {
+    const need = p.medical[item.id];
+    if (need === "none") continue;
+    const cap = acc.medical[item.id];
+    if (cap === "no") {
       add(
         "medical",
-        "たん吸引が必要だが、施設は対応していない",
-        "訪問看護との連携などで、たん吸引に対応できる体制を用意できるか検討する",
+        `${item.label}に対応できない`,
+        `${item.label}に対応できる体制（看護職員・協力医療機関・訪問看護）を用意できるか検討する`,
       );
-    } else if ((s === "night" || s === "both") && acc.suction === "day") {
+    } else if (need === "night" && cap === "day") {
       add(
         "medical",
-        "夜間のたん吸引が必要だが、施設は夜間に対応できない",
-        "夜間のたん吸引に対応できる体制（夜間の看護職員の配置、訪問看護との連携）を用意できるか検討する",
+        `夜間の${item.label}が必要だが、施設は夜間に対応できない`,
+        `夜間の${item.label}に対応できる体制（夜間の看護職員の配置、研修を受けた介護職、訪問看護との連携）を用意できるか検討する`,
       );
-    }
-  }
-  for (const item of MEDICAL_ITEMS) {
-    if (p.medical[item] && !acc[item]) {
-      add(
-        "medical",
-        `${MEDICAL_ITEM_LABELS[item]}に対応できない`,
-        `${MEDICAL_ITEM_LABELS[item]}に対応できる体制（看護職員・協力医療機関）を用意できるか検討する`,
-      );
+    } else {
+      const c = acc.capacity[item.id];
+      if (c && c.limit > 0 && c.current >= c.limit) {
+        add(
+          "medical",
+          `${item.label}の受け入れ枠がいっぱい（${c.current}/${c.limit}名）`,
+          `${item.label}の受け入れ枠に空きが出る見込みを確認し、待機のご案内か、枠の見直しを検討する`,
+        );
+      }
     }
   }
   if (p.careLevel > acc.maxCareLevel) {
@@ -112,8 +103,11 @@ export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
 // ---------- 項目スコア ----------
 
 export function categoryScores(p: ResidentProfile): Record<Category, number> {
-  let medical = p.medical.suction === "none" ? 0 : p.medical.suction === "day" ? 2 : 3;
-  for (const item of MEDICAL_ITEMS) if (p.medical[item]) medical += MEDICAL_POINTS[item];
+  let medical = 0;
+  for (const item of MEDICAL_CARE) {
+    const need = p.medical[item.id];
+    if (need !== "none") medical += item.points + (need === "night" ? 1 : 0);
+  }
 
   const falls = p.physical.fallsLastYear;
   const physical =
@@ -145,9 +139,7 @@ function scoreReasons(p: ResidentProfile, scores: Record<Category, number>): Rea
   const impactOf = (s: number): Reason["impact"] => (s >= 6 ? "high" : "medium");
 
   if (scores.medical >= 3) {
-    const items: string[] = [];
-    if (p.medical.suction !== "none") items.push(p.medical.suction === "day" ? "日中のたん吸引" : "夜間のたん吸引");
-    for (const item of MEDICAL_ITEMS) if (p.medical[item]) items.push(MEDICAL_ITEM_LABELS[item]);
+    const items = neededItems(p.medical).map((m) => (m.night ? `${m.label}（夜間も）` : m.label));
     out.push({
       category: "medical",
       impact: impactOf(scores.medical),
@@ -234,7 +226,7 @@ export function expectationGaps(
   };
 
   const q1 = asList(answers.q1_expectation);
-  if (q1.includes("medical") && !acc.nightNurse) {
+  if (q1.includes("medical") && !hasNightNurse(acc)) {
     add(
       "q1_expectation",
       2 * sev,
@@ -283,7 +275,7 @@ export function expectationGaps(
       );
       break;
     case "natural":
-      if (!acc.endOfLifeCare) {
+      if (!offersEndOfLife(acc)) {
         add("q5_endOfLife", 2 * sev, "自然な看取りを望んでいるが、施設は看取りに対応していない。最期の過ごし方の方針を入居前に説明する");
       }
       break;
@@ -292,7 +284,7 @@ export function expectationGaps(
       break;
   }
 
-  if (answers.q6_emergency === "contactFirst" && !acc.nightNurse) {
+  if (answers.q6_emergency === "contactFirst" && !hasNightNurse(acc)) {
     add(
       "q6_emergency",
       2 * sev,
@@ -353,8 +345,8 @@ function emergencyPolicy(resident: string, facility: string, acc: Acceptance): G
     body: [
       `${resident}様の急変時および終末期の対応について、${facility}とご家族で次の内容を確認しました。`,
       "",
-      `1. 夜間の体制：${acc.nightNurse ? "夜間も看護師が常駐しています。" : "夜間は看護師が常駐していないため、状況により救急搬送を優先し、その後ご家族に連絡する場合があります。"}`,
-      `2. 看取り：${acc.endOfLifeCare ? "施設は看取りに対応しています。具体的な方針は、主治医・ご家族と相談して決めます。" : "施設は看取りに対応していないため、終末期には医療機関などへの移行をご相談する場合があります。"}`,
+      `1. 夜間の体制：${hasNightNurse(acc) ? "夜間も看護師が常駐しています。" : "夜間は看護師が常駐していないため、状況により救急搬送を優先し、その後ご家族に連絡する場合があります。"}`,
+      `2. 看取り：${offersEndOfLife(acc) ? "施設は看取りに対応しています。具体的な方針は、主治医・ご家族と相談して決めます。" : "施設は看取りに対応していないため、終末期には医療機関などへの移行をご相談する場合があります。"}`,
       "3. 急変時の連絡先と連絡の順番：＿＿＿＿＿＿＿＿＿＿＿＿＿＿",
       "4. 延命処置についてのご希望（現時点）：＿＿＿＿＿＿＿＿＿＿＿＿＿＿",
       "5. 方針は、ご本人の状態の変化に応じて、いつでも見直すことができます。",
@@ -393,7 +385,7 @@ function specialClauses(
     if (c) lines.push(c);
   }
   if (fall && !seen.has("q3_falls")) lines.push(CLAUSES.q3_falls);
-  if (medicalScore >= 3 && !acc.nightNurse) {
+  if (medicalScore >= 3 && !hasNightNurse(acc)) {
     lines.push("夜間は看護師が常駐していないため、夜間の急変時には救急搬送を優先する場合がある。");
   }
   if (lines.length === 0) return null;

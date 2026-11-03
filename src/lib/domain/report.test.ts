@@ -12,8 +12,8 @@ function profile(patch: (p: ResidentProfile) => void): ResidentProfile {
 
 const settings = () => {
   const s = defaultSettings("ひだまりの家");
-  s.acceptance.suction = "day";
-  s.acceptance.nightNurse = false;
+  s.acceptance.medical.suctionOral = "day";
+  s.acceptance.nurseStaffing = "day";
   return s;
 };
 
@@ -23,17 +23,17 @@ describe("判定レポート", () => {
       residentName: "山田",
       profile: profile((p) => {
         p.careLevel = 5;
-        p.medical.suction = "night";
+        p.medical.suctionOral = "night";
         p.physical.fallsLastYear = 2;
       }),
       settings: settings(),
       answers: null,
     });
     const report = buildReport(r);
-    expect(report.headline).toBe("施設の受け入れ範囲を超えている項目が1つあります（夜間のたん吸引）。");
+    expect(report.headline).toBe("施設の受け入れ範囲を超えている項目が1つあります（夜間の喀痰吸引（口腔内・鼻腔内））。");
     expect(report.problems[0].impact).toBe("knockout");
     expect(report.actions[0]).toMatchObject({ kind: "resolve", required: true });
-    expect(report.actions[0].text).toContain("夜間のたん吸引に対応できる体制");
+    expect(report.actions[0].text).toContain("夜間の喀痰吸引（口腔内・鼻腔内）に対応できる体制");
     expect(report.actions.some((a) => a.text.includes("家族アンケートの回答をもらい"))).toBe(true);
     expect(report.actions.at(-1)).toMatchObject({ kind: "next", text: "原因の項目を解消できるか検討" });
   });
