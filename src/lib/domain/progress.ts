@@ -1,11 +1,12 @@
 // 入居者ごとの作業の進み具合と「次にやること」。一覧と詳細画面で同じ判断を使う。
 import type { Resident } from "./records";
 
-export type StepKey = "documents" | "profile" | "survey" | "judge";
+export type StepKey = "documents" | "profile" | "interview" | "survey" | "judge";
 
 export const STEP_LABELS: Record<StepKey, string> = {
   documents: "資料と追記",
   profile: "状態の確認",
+  interview: "家族面談",
   survey: "家族アンケート",
   judge: "入居判定",
 };
@@ -36,6 +37,7 @@ export function progressOf(r: Resident): Progress {
   const done: Record<StepKey, boolean> = {
     documents: hasMaterial || Boolean(r.profile),
     profile: confirmed,
+    interview: Boolean(r.interview),
     survey: answered,
     judge: judged && !stale,
   };
@@ -44,6 +46,7 @@ export function progressOf(r: Resident): Progress {
   if (!r.profile && !hasMaterial) next = { step: "documents", text: "資料を登録するか、病状を追記する" };
   else if (!r.profile) next = { step: "documents", text: "AIで資料を読み取る" };
   else if (!confirmed) next = { step: "profile", text: "AIの読み取り結果を確認して保存する" };
+  else if (!r.interview && !judged) next = { step: "interview", text: "家族面談の記録を入力する" };
   else if (!r.survey) next = { step: "survey", text: "家族アンケートのURLを送る" };
   else if (!judged) next = { step: "judge", text: answered ? "判定する" : "判定する（家族の回答は後から反映できます）" };
   else if (stale) next = { step: "judge", text: "情報が変わったので、もう一度判定する" };

@@ -30,7 +30,7 @@ export const POST = handle(async (req: Request, ctx: RouteContext<"/api/resident
     }
   }
 
-  const result = judge({ residentName: resident.name, profile: resident.profile, settings, answers });
+  const result = judge({ residentName: resident.name, profile: resident.profile, settings, answers, interview: resident.interview });
   const record = await saveJudgment(staff, id, result, version, pastSummary);
   return Response.json({ judgment: record });
 });

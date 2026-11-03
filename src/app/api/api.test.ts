@@ -133,6 +133,12 @@ describe("入居判定の通しの流れ", () => {
     const patched = await json(await resident.PATCH(req("staff-a", { profile: fixed }, "PATCH"), params({ id })));
     expect(patched.body.resident.profileConfirmed).toBe(true);
 
+    // 家族面談の記録（記録者と日時はサーバーで付ける）
+    const iv = await json(
+      await resident.PATCH(req("staff-a", { interview: { attitudes: ["cooperative"], acuteRisk: "low", recordedBy: "偽物" } }, "PATCH"), params({ id })),
+    );
+    expect(iv.body.resident.interview).toMatchObject({ attitudes: ["cooperative"], acuteRisk: "low", recordedBy: "staff@a.jp" });
+
     // アンケートURL発行（医療的ケアなし → 急変時の設問は出ない）
     const link = await json(await surveyLink.POST(req("staff-a", {}), params({ id })));
     let token = link.body.url.split("/survey/")[1];

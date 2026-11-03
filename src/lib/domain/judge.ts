@@ -3,6 +3,7 @@
 // 同じ入力なら必ず同じ結果になり、判定が低い原因を項目単位で示せる。
 // 家族の回答（期待値のずれ）は ABCDE に入れず、別枠で返す。
 
+import type { Interview } from "./interview";
 import { MEDICAL_CARE, neededItems } from "./medical";
 import {
   CARE_LEVEL_LABELS,
@@ -102,7 +103,7 @@ export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
 
 // ---------- 項目スコア ----------
 
-export function categoryScores(p: ResidentProfile): Record<Category, number> {
+export function categoryScores(p: ResidentProfile, unclean = false): Record<Category, number> {
   let medical = 0;
   for (const item of MEDICAL_CARE) {
     const need = p.medical[item.id];
@@ -121,7 +122,8 @@ export function categoryScores(p: ResidentProfile): Record<Category, number> {
     (c.wandering ? 2 : 0) +
     (c.aggression ? 3 : 0) +
     (c.careRefusal ? 1 : 0) +
-    (c.nightDisturbance ? 1 : 0);
+    (c.nightDisturbance ? 1 : 0) +
+    (unclean ? 1 : 0);
 
   return { medical: cap10(medical), physical: cap10(physical), cognition: cap10(cognition) };
 }
@@ -134,7 +136,7 @@ export function hasFallRisk(p: ResidentProfile): boolean {
   );
 }
 
-function scoreReasons(p: ResidentProfile, scores: Record<Category, number>): Reason[] {
+function scoreReasons(p: ResidentProfile, scores: Record<Category, number>, unclean = false): Reason[] {
   const out: Reason[] = [];
   const impactOf = (s: number): Reason["impact"] => (s >= 6 ? "high" : "medium");
 
@@ -166,6 +168,7 @@ function scoreReasons(p: ResidentProfile, scores: Record<Category, number>): Rea
     if (c.aggression) items.push("暴言・暴力");
     if (c.careRefusal) items.push("介護拒否");
     if (c.nightDisturbance) items.push("夜間の不穏");
+    if (unclean) items.push("不潔行為");
     out.push({
       category: "cognition",
       impact: impactOf(scores.cognition),
@@ -409,16 +412,35 @@ export interface JudgeInput {
   profile: ResidentProfile;
   settings: FacilitySettings;
   answers: SurveyAnswers | null;
+  /** 家族面談の記録（無ければ資料の内容だけで判定する） */
+  interview?: Interview | null;
 }
 
-export function judge({ residentName, profile, settings, answers }: JudgeInput): JudgmentResult {
+/** 面談で確認した BPSD（周辺症状）を、資料から読み取った状態に重ねる */
+export function withInterview(p: ResidentProfile, interview: Interview | null | undefined): ResidentProfile {
+  if (!interview) return p;
+  const b = interview.bpsd;
+  return {
+    ...p,
+    cognition: {
+      ...p.cognition,
+      wandering: p.cognition.wandering || b.includes("wandering"),
+      aggression: p.cognition.aggression || b.includes("aggression"),
+      careRefusal: p.cognition.careRefusal || b.includes("careRefusal"),
+    },
+  };
+}
+
+export function judge({ residentName, profile: raw, settings, answers, interview }: JudgeInput): JudgmentResult {
   const acc = settings.acceptance;
+  const profile = withInterview(raw, interview);
+  const unclean = Boolean(interview?.bpsd.includes("uncleanBehavior"));
   const ko = knockouts(profile, acc);
-  const scores = categoryScores(profile);
+  const scores = categoryScores(profile, unclean);
   const score = riskScore(scores, settings);
   const fall = hasFallRisk(profile);
 
-  const reasons: Reason[] = [...ko, ...scoreReasons(profile, scores)];
+  const reasons: Reason[] = [...ko, ...scoreReasons(profile, scores, unclean)];
   let grade: Grade;
   if (ko.length >= 2) grade = "E";
   else if (ko.length === 1) grade = "D";
@@ -430,6 +452,15 @@ export function judge({ residentName, profile, settings, answers }: JudgeInput):
       impact: "condition",
       text: "転倒リスクがある（転倒リスク説明・同意書での合意が前提）",
       action: "転倒リスク説明・同意書で、転倒を完全には防げないことをご家族と合意する",
+    });
+    if (grade === "A") grade = "B";
+  }
+  if (interview?.acuteRisk === "high") {
+    reasons.push({
+      category: "medical",
+      impact: "condition",
+      text: "急変・事故のリスクが高い（面談で確認：頻繁な転倒・誤嚥・発熱）",
+      action: "急変時の連絡の順番と、救急搬送をどう判断するかを入居前にご家族と決めておく",
     });
     if (grade === "A") grade = "B";
   }
