@@ -18,7 +18,7 @@ const FALLBACK_ACTION: Record<Category, string> = {
 
 export interface ReportAction {
   /** どの種類のやることか（画面での見出し・色分けに使う） */
-  kind: "resolve" | "prepare" | "explain" | "document" | "next";
+  kind: "resolve" | "prepare" | "explain" | "relation" | "document" | "next";
   text: string;
   /** 受け入れの前に必ず片づけること */
   required: boolean;
@@ -66,6 +66,9 @@ export function buildReport(r: JudgmentResult): Report {
   for (const g of r.gaps) actions.push({ kind: "explain", text: g.explain, required: g.level === "大" });
   if (!r.surveyAnswered) {
     actions.push({ kind: "explain", text: "家族アンケートの回答をもらい、ご家族の考えとのずれを確認する", required: false });
+  }
+  for (const a of r.relation?.actions ?? []) {
+    actions.push({ kind: "relation", text: a, required: r.relation?.signal === "danger" });
   }
   for (const d of r.documents) actions.push({ kind: "document", text: `「${d.title}」を用意し、説明して署名をもらう`, required: true });
   actions.push({ kind: "next", text: GRADE_MEANINGS[r.grade].next, required: false });

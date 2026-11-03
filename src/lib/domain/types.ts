@@ -8,6 +8,7 @@ import {
   type MedicalNeeds,
   type NurseStaffing,
 } from "./medical";
+import type { RelationRisk } from "./relation";
 
 /** 要介護度: 0=自立, 1-2=要支援1-2, 3-7=要介護1-5 */
 export type CareLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -182,6 +183,8 @@ export interface JudgmentResult {
   wishes: string[]; // リスク扱いしない家族の希望
   documents: GeneratedDocument[];
   surveyAnswered: boolean;
+  /** 判定2: カスハラ発生予測スコア（以前の判定記録には無い） */
+  relation?: RelationRisk;
 }
 
 /** AI が根拠を示す対象の項目（判定に使う項目。医療的ケアは medical.ts の項目 ID） */

@@ -1,5 +1,6 @@
 // Firestore に保存するレコードの形（API のレスポンスとしてクライアントにも渡す）
 import type { Interview } from "./interview";
+import type { RelationSignal } from "./relation";
 import type { SurveyAnswers } from "./survey";
 import type { Evidence, FacilitySettings, Grade, JudgmentResult, ResidentProfile } from "./types";
 
@@ -44,7 +45,14 @@ export interface Resident {
   /** 家族面談でスタッフが入力した記録（以前のデータには無い） */
   interview: Interview | null;
   survey: SurveyState | null;
-  latestJudgment: { id: string; grade: Grade; riskScore: number; at: string } | null;
+  latestJudgment: {
+    id: string;
+    grade: Grade;
+    riskScore: number;
+    at: string;
+    /** 判定2 の信号（以前の判定には無い） */
+    relationSignal?: RelationSignal;
+  } | null;
 }
 
 export interface JudgmentRecord {

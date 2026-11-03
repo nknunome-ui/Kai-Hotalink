@@ -15,6 +15,9 @@ function facts(r: Resident): string[] {
   if (r.profile?.age != null) out.push(`${r.profile.age}歳`);
   if (r.profile) out.push(CARE_LEVEL_LABELS[r.profile.careLevel]);
   if (r.survey) out.push(r.survey.submittedAt ? "家族回答あり" : "家族回答待ち");
+  const signal = r.latestJudgment?.relationSignal;
+  if (signal === "caution") out.push("🟡カスハラ予測：注意");
+  if (signal === "danger") out.push("🔴カスハラ予測：危険");
   return out;
 }
 

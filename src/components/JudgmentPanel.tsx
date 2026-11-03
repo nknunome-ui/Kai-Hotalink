@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { JudgmentRecord } from "@/lib/domain/records";
 import { buildReport, IMPACT_LABEL, type ReportAction } from "@/lib/domain/report";
+import { SIGNAL_LABELS, type RelationRisk, type RelationSignal } from "@/lib/domain/relation";
 import { CATEGORY_LABELS, GRADE_MEANINGS, type Category, type GeneratedDocument, type Reason } from "@/lib/domain/types";
 import { GradeLantern, gradeColor } from "./GradeLantern";
 import { Button, cx } from "./ui";
@@ -18,6 +19,7 @@ export function JudgmentSummary({ record, fresh }: { record: JudgmentRecord; fre
   return (
     <div className="space-y-4">
       <GradeLantern grade={r.grade} animate={fresh} />
+      {r.relation && <SignalPill risk={r.relation} />}
       <p className="text-[15px] leading-relaxed">{report.headline}</p>
       <ul className="flex flex-wrap gap-2 text-[13px]">
         <li className="rounded-full bg-paper px-3 py-1">
@@ -83,18 +85,36 @@ export function JudgmentReport({ record, residentName }: { record: JudgmentRecor
             印刷・PDFで保存
           </Button>
         </div>
-        <div className="mt-4 flex items-center gap-4 rounded-2xl bg-paper p-4">
-          <span
-            className="inline-flex size-14 shrink-0 items-center justify-center rounded-full text-[30px] font-bold text-white"
-            style={{ background: color }}
-            aria-label={`判定 ${r.grade}`}
-          >
-            {r.grade}
-          </span>
-          <div>
-            <p className="text-[17px] font-bold">{GRADE_MEANINGS[r.grade].meaning}</p>
-            <p className="text-[15px] leading-relaxed">{report.headline}</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="flex items-center gap-4 rounded-2xl bg-paper p-4">
+            <span
+              className="inline-flex size-14 shrink-0 items-center justify-center rounded-full text-[30px] font-bold text-white"
+              style={{ background: color }}
+              aria-label={`判定 ${r.grade}`}
+            >
+              {r.grade}
+            </span>
+            <div>
+              <p className="text-[12px] font-bold text-ink-soft">判定1　医療・介護面の受け入れ</p>
+              <p className="text-[17px] font-bold">{GRADE_MEANINGS[r.grade].meaning}</p>
+              <p className="text-[15px] leading-relaxed">{report.headline}</p>
+            </div>
           </div>
+          {r.relation && (
+            <a href="#relation-risk" className="flex items-center gap-4 rounded-2xl bg-paper p-4 hover:bg-brand-tint">
+              <span
+                className="inline-flex size-14 shrink-0 items-center justify-center rounded-full text-[20px] font-bold text-white"
+                style={{ background: SIGNAL_COLORS[r.relation.signal] }}
+              >
+                {r.relation.score}
+              </span>
+              <div>
+                <p className="text-[12px] font-bold text-ink-soft">判定2　カスハラ発生予測</p>
+                <p className="text-[17px] font-bold">{SIGNAL_LABELS[r.relation.signal]}</p>
+                <p className="text-[13px] text-ink-soft">0〜100 点。内訳は下の「2」</p>
+              </div>
+            </a>
+          )}
         </div>
       </header>
 
@@ -111,11 +131,21 @@ export function JudgmentReport({ record, residentName }: { record: JudgmentRecor
           )}
         </Section>
 
-        <Section n={2} title="やること（提案）" note="受け入れの判断と準備のために、施設で行うことの提案です。">
+        {r.relation && (
+          <Section n={2} title="カスハラ発生予測（判定2）" note="面談の記録・アンケートの回答・ご家族の認識と資料の差から計算した目安です。ご家族には表示しないでください。">
+            <RelationDetail risk={r.relation} />
+          </Section>
+        )}
+
+        <Section
+          n={r.relation ? 3 : 2}
+          title="推奨アクション（判定3）"
+          note="受け入れの判断と準備のために、施設で行うことの提案です。"
+        >
           <ActionList actions={report.actions} />
         </Section>
 
-        <Section n={3} title="ご家族の考えとのずれ" note="ご家族が答えたご本人の状態と資料との差、ご家族の希望と施設の方針の違いです。判定の A〜E には含めていません。">
+        <Section n={r.relation ? 4 : 3} title="ご家族の考えとのずれ" note="ご家族が答えたご本人の状態と資料との差、ご家族の希望と施設の方針の違いです。判定の A〜E には含めていません。">
           {!r.surveyAnswered ? (
             <p className="text-[14px] text-ink-soft">家族アンケートの回答がまだありません。</p>
           ) : r.gaps.length === 0 ? (
@@ -161,7 +191,7 @@ export function JudgmentReport({ record, residentName }: { record: JudgmentRecor
         </Section>
 
         {r.documents.length > 0 && (
-          <Section n={4} title="用意する書類（文案）" note="たたき台です。施設の書式に合わせて直してから使ってください。">
+          <Section n={r.relation ? 5 : 4} title="用意する書類（文案）" note="たたき台です。施設の書式に合わせて直してから使ってください。">
             <div className="space-y-2">
               {r.documents.map((d) => (
                 <DocumentDraft key={d.kind} doc={d} />
@@ -222,6 +252,7 @@ const ACTION_LABEL: Record<ReportAction["kind"], string> = {
   resolve: "解消",
   prepare: "準備",
   explain: "説明",
+  relation: "関係づくり",
   document: "書類",
   next: "次の対応",
 };
@@ -291,5 +322,68 @@ function DocumentDraft({ doc }: { doc: GeneratedDocument }) {
         </Button>
       </div>
     </details>
+  );
+}
+
+const SIGNAL_COLORS: Record<RelationSignal, string> = {
+  safe: "var(--color-grade-a)",
+  caution: "var(--color-grade-c)",
+  danger: "var(--color-grade-e)",
+};
+const SIGNAL_DOT: Record<RelationSignal, string> = { safe: "🟢", caution: "🟡", danger: "🔴" };
+
+function SignalPill({ risk }: { risk: RelationRisk }) {
+  return (
+    <p className="inline-flex items-center gap-2 rounded-full bg-paper px-3 py-1 text-[14px]">
+      <span aria-hidden>{SIGNAL_DOT[risk.signal]}</span>
+      カスハラ予測 <b>{SIGNAL_LABELS[risk.signal]}</b>（{risk.score}点）
+    </p>
+  );
+}
+
+function RelationDetail({ risk }: { risk: RelationRisk }) {
+  return (
+    <div id="relation-risk" className="scroll-mt-6 space-y-3">
+      <div className="rounded-2xl bg-paper p-4">
+        <div className="mb-2 flex items-baseline justify-between">
+          <p className="text-[16px] font-bold">
+            <span aria-hidden>{SIGNAL_DOT[risk.signal]}</span> {SIGNAL_LABELS[risk.signal]}
+          </p>
+          <p className="text-[14px]">
+            <b className="text-[22px]">{risk.score}</b> / 100 点
+          </p>
+        </div>
+        <div className="relative h-3 overflow-hidden rounded-full bg-line" aria-hidden>
+          <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${risk.score}%`, background: SIGNAL_COLORS[risk.signal] }} />
+        </div>
+        <p className="mt-1 flex justify-between text-[11px] text-mute">
+          <span>🟢 安全（0〜29）</span>
+          <span>🟡 注意（30〜59）</span>
+          <span>🔴 危険（60〜）</span>
+        </p>
+      </div>
+      {risk.factors.length === 0 ? (
+        <p className="text-[14px] text-ink-soft">点数が付く記録はありませんでした。</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {risk.factors.map((f, i) => (
+            <li key={i} className="flex gap-3 rounded-2xl border-2 border-line p-3 text-[14px] leading-relaxed">
+              <span className="h-fit shrink-0 rounded-full bg-brand-tint px-2.5 py-0.5 text-[12px] font-bold text-brand-strong">{f.source}</span>
+              <span className="min-w-0 flex-1">{f.text}</span>
+              {f.points !== null && (
+                <span className={cx("shrink-0 font-bold tabular-nums", f.points < 0 ? "text-grade-a" : "text-alert")}>
+                  {f.points > 0 ? `+${f.points}` : f.points}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {risk.missing.map((m, i) => (
+        <p key={i} className="text-[13px] text-ink-soft">
+          ※ {m}
+        </p>
+      ))}
+    </div>
   );
 }
