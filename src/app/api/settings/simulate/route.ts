@@ -17,8 +17,8 @@ export const POST = handle(async (req: Request) => {
   const people = await residentsForSimulation(staff.facilityId);
   const rows = people.map((r) => {
     const answers = r.survey?.answers ?? null;
-    const before = judge({ residentName: r.name, profile: r.profile!, settings: current, answers });
-    const after = judge({ residentName: r.name, profile: r.profile!, settings: next, answers });
+    const before = judge({ residentName: r.name, profile: r.profile!, settings: current, answers, interview: r.interview });
+    const after = judge({ residentName: r.name, profile: r.profile!, settings: next, answers, interview: r.interview });
     return {
       id: r.id,
       name: r.name,

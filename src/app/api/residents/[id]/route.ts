@@ -1,3 +1,4 @@
+import { normalizeInterview } from "@/lib/domain/interview";
 import { normalizeProfile } from "@/lib/domain/profile";
 import { buildSurvey, surveyByIds } from "@/lib/domain/survey";
 import { handle, HttpError, readJson, requireStaff } from "@/lib/server/http";
@@ -33,6 +34,13 @@ export const PATCH = handle(async (req: Request, ctx: RouteContext<"/api/residen
       if (v.length > 10000) throw new HttpError(400, "入力が長すぎます（1万文字まで）");
       patch[f] = v;
     }
+  }
+  if (body.interview !== undefined) {
+    patch.interview = {
+      ...normalizeInterview(body.interview),
+      recordedAt: new Date().toISOString(),
+      recordedBy: staff.email ?? staff.uid,
+    };
   }
   if (body.profile !== undefined) {
     patch.profile = normalizeProfile(body.profile);

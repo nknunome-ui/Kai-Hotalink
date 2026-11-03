@@ -5,9 +5,19 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { JudgmentReport, JudgmentSummary } from "@/components/JudgmentPanel";
 import { ProfileForm } from "@/components/ProfileForm";
-import { Button, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
+import { Button, Check, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { clientStorage, storageErrorMessage } from "@/lib/client/firebase";
+import {
+  ACUTE_RISKS,
+  ATTITUDES,
+  BPSD_ITEMS,
+  DEMAND_LEVELS,
+  emptyInterview,
+  FAMILY_RELATIONS,
+  interviewChecklist,
+  LEAVE_REASONS,
+} from "@/lib/domain/interview";
 import { STEP_LABELS, progressOf, type Progress, type StepKey } from "@/lib/domain/progress";
 import type { JudgmentRecord, Resident } from "@/lib/domain/records";
 import { labelOf, type SurveyQuestion } from "@/lib/domain/survey";
@@ -63,6 +73,7 @@ export default function ResidentPage() {
           <div>
             <DocumentsStep resident={r} facilityId={me.facilityId} progress={progress} onChange={load} />
             <ProfileStep key={r.extraction?.at ?? "manual"} resident={r} progress={progress} onChange={load} />
+            <InterviewStep key={r.interview?.recordedAt ?? "new"} resident={r} progress={progress} onChange={load} />
             <SurveyStep resident={r} questions={data.questions} progress={progress} onChange={load} />
           </div>
           <JudgeStep resident={r} judgments={data.judgments} progress={progress} onChange={load} />
@@ -73,7 +84,7 @@ export default function ResidentPage() {
   );
 }
 
-const STEP_ORDER: StepKey[] = ["documents", "profile", "survey", "judge"];
+const STEP_ORDER: StepKey[] = ["documents", "profile", "interview", "survey", "judge"];
 
 /** 4つの手順の進み具合と、次にやること */
 function ProgressBar({ progress }: { progress: Progress }) {
@@ -81,7 +92,7 @@ function ProgressBar({ progress }: { progress: Progress }) {
   const go = (k: StepKey) => document.getElementById(`step-${k}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
     <div className="mb-6 rounded-3xl bg-sheet p-4 shadow-card sm:p-5">
-      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {STEP_ORDER.map((k, i) => (
           <li key={k}>
             <button
@@ -353,7 +364,156 @@ function ProfileStep({ resident, progress, onChange }: { resident: Resident; pro
   );
 }
 
-// ---------- 3. 家族アンケート ----------
+// ---------- 3. 家族面談 ----------
+
+type InterviewDraft = ReturnType<typeof emptyInterview>;
+
+function InterviewStep({ resident, progress, onChange }: { resident: Resident; progress: Progress; onChange: () => void }) {
+  const { api } = useAuth();
+  const [draft, setDraft] = useState<InterviewDraft>(() => {
+    if (!resident.interview) return emptyInterview();
+    const { recordedAt: _a, recordedBy: _b, ...rest } = resident.interview;
+    void _a;
+    void _b;
+    return rest;
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (patch: Partial<InterviewDraft>) => setDraft({ ...draft, ...patch });
+  const toggle = <T extends string>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const checklist = interviewChecklist(resident.profile, resident.extraction?.uncertain ?? []);
+  const iv = resident.interview;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/residents/${resident.id}`, { method: "PATCH", body: JSON.stringify({ interview: draft }) });
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存できませんでした");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Step n={3} title="家族面談" status={iv ? `${fmt(iv.recordedAt)} 記録（${iv.recordedBy}）` : "未記録"} {...stepProps("interview", progress)}>
+      <p className="mb-4 text-[14px] text-ink-soft">
+        ご家族の来設・見学・相談のときに、スタッフが入力します。ご家族には表示されない、施設内の記録です。
+      </p>
+
+      <details className="mb-5 rounded-2xl bg-brand-tint" open={!iv}>
+        <summary className="cursor-pointer px-4 py-3 text-[14px] font-bold">面談でご家族に確認すること（{checklist.length}件）</summary>
+        <ul className="list-disc space-y-1 px-4 pb-4 pl-9 text-[14px]">
+          {checklist.map((c, i) => (
+            <li key={i}>{c}</li>
+          ))}
+        </ul>
+      </details>
+
+      <h3 className="mb-1 text-[16px] font-bold">A. ご家族の言動・態度</h3>
+      <p className="mb-3 text-[12px] text-mute">見たこと・聞いたことを、そのまま記録してください。</p>
+      <div className="space-y-5">
+        <Question label="A-1. 面談時の態度・言葉遣い" note="当てはまるものをすべて">
+          <div className="grid gap-x-6 sm:grid-cols-2">
+            {ATTITUDES.map((o) => (
+              <Check key={o.value} label={o.label} checked={draft.attitudes.includes(o.value)} onChange={() => set({ attitudes: toggle(draft.attitudes, o.value) })} />
+            ))}
+          </div>
+        </Question>
+        <Question label="A-2. 前の施設・サービスから移る理由">
+          <Choice options={LEAVE_REASONS} value={draft.leaveReason} onChange={(v) => set({ leaveReason: v })} />
+        </Question>
+        <Question label="A-3. 施設への期待・要求の水準">
+          <Choice options={DEMAND_LEVELS} value={draft.demandLevel} onChange={(v) => set({ demandLevel: v })} />
+        </Question>
+        <Question label="A-4. 親族間の関係">
+          <Choice options={FAMILY_RELATIONS} value={draft.familyRelation} onChange={(v) => set({ familyRelation: v })} />
+        </Question>
+        <Question label="A-5. 相談員の所感" note="1＝安全そう、5＝かなり要注意">
+          <Choice
+            options={([1, 2, 3, 4, 5] as const).map((n) => ({ value: n, label: String(n) }))}
+            value={draft.staffConcern}
+            onChange={(v) => set({ staffConcern: v })}
+            inline
+          />
+        </Question>
+      </div>
+
+      <h3 className="mt-7 mb-3 text-[16px] font-bold">B. ご本人の状態</h3>
+      <div className="space-y-5">
+        <Question label="B-2. BPSD（周辺症状）" note="当てはまるものをすべて。なければ空のまま">
+          <div className="grid gap-x-6 sm:grid-cols-2">
+            {BPSD_ITEMS.map((o) => (
+              <Check key={o.value} label={o.label} checked={draft.bpsd.includes(o.value)} onChange={() => set({ bpsd: toggle(draft.bpsd, o.value) })} />
+            ))}
+          </div>
+        </Question>
+        <Question label="B-3. 急変・事故のリスク">
+          <Choice options={ACUTE_RISKS} value={draft.acuteRisk} onChange={(v) => set({ acuteRisk: v })} />
+        </Question>
+      </div>
+      <p className="mt-3 text-[12px] text-mute">要介護度・認知症の程度は、2 の「状態の確認」で入力します。</p>
+
+      {error && <div className="mt-4"><Notice tone="alert">{error}</Notice></div>}
+      <Button className="mt-5" onClick={save} busy={busy}>
+        {iv ? "面談の記録を更新" : "面談の記録を保存"}
+      </Button>
+    </Step>
+  );
+}
+
+function Question({ label, note, children }: { label: string; note?: string; children: React.ReactNode }) {
+  return (
+    <fieldset>
+      <legend className="mb-1.5 text-[14px] font-bold">
+        {label}
+        {note && <span className="ml-2 text-[12px] font-normal text-mute">{note}</span>}
+      </legend>
+      {children}
+    </fieldset>
+  );
+}
+
+/** 単一選択（未選択も可）。もう一度押すと選択を外せる */
+function Choice<T extends string | number>({
+  options,
+  value,
+  onChange,
+  inline,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T | null;
+  onChange: (v: T | null) => void;
+  inline?: boolean;
+}) {
+  return (
+    <div role="radiogroup" className={cx("flex flex-wrap gap-2", !inline && "sm:flex-col sm:items-start")}>
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(on ? null : o.value)}
+            className={cx(
+              "min-h-10 rounded-full border-2 px-4 text-left text-[14px] transition-colors",
+              inline && "min-w-12 text-center",
+              on ? "border-brand bg-brand-tint font-bold text-brand-strong" : "border-line bg-sheet hover:border-brand-soft",
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- 4. 家族アンケート ----------
 
 function SurveyStep({
   resident,
@@ -392,7 +552,7 @@ function SurveyStep({
   const status = !s ? "未発行" : s.submittedAt ? `${fmt(s.submittedAt)} 回答` : `回答待ち（${fmt(s.expiresAt)}まで有効）`;
 
   return (
-    <Step n={3} title="家族アンケート" status={status} {...stepProps("survey", progress)}>
+    <Step n={4} title="家族アンケート" status={status} {...stepProps("survey", progress)}>
       <p className="mb-4 text-[14px] text-ink-soft">
         URLを発行して、ご家族にメールやLINEで送ってください。ログインなしで、スマホから回答できます。
         {!s && !resident.profileConfirmed && " 先に 2 の状態を保存しておくと、医療的ケアに応じた設問が自動で追加されます。"}
@@ -454,7 +614,7 @@ function SurveyStep({
   );
 }
 
-// ---------- 4. 判定 ----------
+// ---------- 5. 判定 ----------
 
 function JudgeStep({
   resident,
@@ -497,7 +657,7 @@ function JudgeStep({
         )}
       >
         <div className="mb-4 flex items-center gap-3">
-          <StepBadge n={4} done={progress.done.judge} current={progress.next?.step === "judge"} />
+          <StepBadge n={5} done={progress.done.judge} current={progress.next?.step === "judge"} />
           <h2 className="text-[18px] font-bold">入居判定</h2>
         </div>
         {progress.stale && (

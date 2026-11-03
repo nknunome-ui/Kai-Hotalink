@@ -1,4 +1,5 @@
 // Firestore に保存するレコードの形（API のレスポンスとしてクライアントにも渡す）
+import type { Interview } from "./interview";
 import type { SurveyAnswers } from "./survey";
 import type { Evidence, FacilitySettings, Grade, JudgmentResult, ResidentProfile } from "./types";
 
@@ -40,6 +41,8 @@ export interface Resident {
   interviewNotes: string; // 面談メモ
   priorFacilityNotes: string; // 前施設やケアマネからのトラブル情報
   documents: StoredDocument[];
+  /** 家族面談でスタッフが入力した記録（以前のデータには無い） */
+  interview: Interview | null;
   survey: SurveyState | null;
   latestJudgment: { id: string; grade: Grade; riskScore: number; at: string } | null;
 }

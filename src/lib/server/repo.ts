@@ -44,7 +44,7 @@ function toResident(id: string, data: StoredResident): Resident {
         profile: rest.extraction.profile ? normalizeProfile(rest.extraction.profile) : undefined,
       }
     : null;
-  return { id, ...rest, profile, extraction, survey: publicSurvey };
+  return { id, ...rest, profile, extraction, interview: rest.interview ?? null, survey: publicSurvey };
 }
 
 // ---------- 設定 ----------
@@ -108,6 +108,7 @@ export async function createResident(fid: string, name: string): Promise<Residen
     interviewNotes: "",
     priorFacilityNotes: "",
     documents: [],
+    interview: null,
     survey: null,
     latestJudgment: null,
   };
@@ -135,6 +136,7 @@ type ResidentPatch = Partial<
     | "extraction"
     | "staffNotes"
     | "interviewNotes"
+    | "interview"
     | "priorFacilityNotes"
     | "latestJudgment"
   >

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyInterview } from "./interview";
 import { normalizeEvidence } from "./profile";
 import { progressOf } from "./progress";
 import type { Resident } from "./records";
@@ -16,6 +17,7 @@ const base = (): Resident => ({
   interviewNotes: "",
   priorFacilityNotes: "",
   documents: [],
+  interview: null,
   survey: null,
   latestJudgment: null,
 });
@@ -40,8 +42,11 @@ describe("次にやること", () => {
     expect(progressOf(r).done).toMatchObject({ documents: true, profile: false });
   });
 
-  it("確認後 → アンケート、回答待ちでも判定に進める", () => {
-    const r = { ...base(), profile: emptyProfile(), profileConfirmed: true };
+  it("確認後 → 面談 → アンケート、回答待ちでも判定に進める", () => {
+    const r: Resident = { ...base(), profile: emptyProfile(), profileConfirmed: true };
+    expect(progressOf(r).next).toMatchObject({ step: "interview", text: "家族面談の記録を入力する" });
+    r.interview = { ...emptyInterview(), recordedAt: "2026-10-02T00:00:00.000Z", recordedBy: "staff@a.jp" };
+    expect(progressOf(r).done.interview).toBe(true);
     expect(progressOf(r).next?.step).toBe("survey");
     r.survey = survey("2026-10-02T00:00:00.000Z", null);
     expect(progressOf(r).next).toMatchObject({ step: "judge", text: "判定する（家族の回答は後から反映できます）" });
