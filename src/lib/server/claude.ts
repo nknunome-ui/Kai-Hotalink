@@ -223,7 +223,7 @@ export async function summarizePastExperience(text: string): Promise<string> {
     max_tokens: 4000,
     output_config: { effort: "low" },
     system:
-      "介護施設の相談員向けに、入居希望者の家族が書いた「過去に病院や介護サービスで困ったこと」を要約します。家族を評価・ラベル付けする言葉（クレーマー、要注意など）は使わず、事実と家族が望んでいたことを中立的に、日本語で2〜3文にまとめてください。",
+      "介護施設の相談員向けに、入居希望者の家族がアンケートに書いた自由記述（入居を考えた理由、これまで困ったこと、施設への要望など）を要約します。家族を評価・ラベル付けする言葉（クレーマー、要注意など）は使わず、事実と家族が望んでいることを中立的に、日本語で2〜3文にまとめてください。",
     messages: [{ role: "user", content: t.slice(0, 2000) }],
   });
   const block = res.content.find((b): b is Anthropic.TextBlock => b.type === "text");

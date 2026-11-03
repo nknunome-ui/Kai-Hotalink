@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { judge, knockouts, categoryScores, filterGaps } from "./judge";
 import { defaultSettings, PRESETS, validateSettings } from "./presets";
-import { buildSurvey, validateAnswers } from "./survey";
+import { buildSurvey, surveyByIds, validateAnswers } from "./survey";
 import { emptyProfile, type ResidentProfile } from "./types";
 
 function profile(patch: (p: ResidentProfile) => void): ResidentProfile {
@@ -148,8 +148,8 @@ describe("アンケート", () => {
     expect(buildSurvey(p).some((q) => q.id === "q6_emergency")).toBe(true);
   });
 
-  it("必須未回答・不正な値・選択数超過を弾く", () => {
-    const qs = buildSurvey(null);
+  it("以前のアンケート: 必須未回答・不正な値・選択数超過を弾く", () => {
+    const qs = surveyByIds(["q1_expectation", "q2_habits", "q3_falls", "q4_contact", "q5_endOfLife", "q7_differentCare", "q8_pastExperience"]);
     expect(validateAnswers(qs, {})).toContain("未回答");
     const ok = {
       q1_expectation: ["safety"],

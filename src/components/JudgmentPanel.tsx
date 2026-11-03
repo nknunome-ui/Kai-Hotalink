@@ -115,7 +115,7 @@ export function JudgmentReport({ record, residentName }: { record: JudgmentRecor
           <ActionList actions={report.actions} />
         </Section>
 
-        <Section n={3} title="ご家族の考えとのずれ" note="ご家族の回答と、施設の方針・ご本人の状態の違いです。判定の A〜E には含めていません。">
+        <Section n={3} title="ご家族の考えとのずれ" note="ご家族が答えたご本人の状態と資料との差、ご家族の希望と施設の方針の違いです。判定の A〜E には含めていません。">
           {!r.surveyAnswered ? (
             <p className="text-[14px] text-ink-soft">家族アンケートの回答がまだありません。</p>
           ) : r.gaps.length === 0 ? (
@@ -132,7 +132,12 @@ export function JudgmentReport({ record, residentName }: { record: JudgmentRecor
                   >
                     ずれ {g.level}
                   </span>
-                  <span>{g.explain}</span>
+                  <span>
+                    {g.kind === "perception" && (
+                      <span className="mr-2 text-[12px] font-bold text-ink-soft">状態の受け止め方</span>
+                    )}
+                    {g.explain}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -149,7 +154,7 @@ export function JudgmentReport({ record, residentName }: { record: JudgmentRecor
           )}
           {record.pastExperienceSummary && (
             <div className="mt-4">
-              <h4 className="mb-1 text-[13px] font-bold text-ink-soft">過去に不満を感じた点（AI要約）</h4>
+              <h4 className="mb-1 text-[13px] font-bold text-ink-soft">ご家族の自由記述（AI要約）</h4>
               <p className="text-[14px]">{record.pastExperienceSummary}</p>
             </div>
           )}

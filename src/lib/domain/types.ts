@@ -161,6 +161,8 @@ export interface Gap {
   questionId: string;
   level: GapLevel;
   magnitude: number;
+  /** perception: ご家族の認識と資料の差（状態を軽く見ている）。無ければ希望と施設の方針のずれ */
+  kind?: "perception";
   /** 施設に表示する「事前に説明すべき点」 */
   explain: string;
 }

@@ -223,10 +223,12 @@ export function expectationGaps(
   const fall = hasFallRisk(p);
   const gaps: Gap[] = [];
   const wishes: string[] = [];
-  const add = (questionId: string, magnitude: number, explain: string) => {
+  const add = (questionId: string, magnitude: number, explain: string, kind?: Gap["kind"]) => {
     const m = Math.round(magnitude * 10) / 10;
-    gaps.push({ questionId, magnitude: m, level: levelOf(m), explain });
+    gaps.push({ questionId, magnitude: m, level: levelOf(m), explain, ...(kind ? { kind } : {}) });
   };
+
+  currentSurveyGaps(p, acc, answers, sev, fall, add, wishes);
 
   const q1 = asList(answers.q1_expectation);
   if (q1.includes("medical") && !hasNightNurse(acc)) {
@@ -307,6 +309,135 @@ export function expectationGaps(
   return { gaps, wishes };
 }
 
+// ---------- 現在のアンケート（f_ で始まる設問） ----------
+
+/** ご家族が答えた状態を、資料の状態と同じものさし（数字が大きいほど重い）に直す */
+const FAMILY_MOBILITY: Record<string, number> = { walk: 0, cane: 1, wheelchairSelf: 2, wheelchairAssist: 3, bedridden: 4 };
+const PROFILE_MOBILITY: Record<ResidentProfile["physical"]["mobility"], number> = {
+  independent: 0,
+  supervision: 1,
+  partial: 2,
+  full: 3,
+  bedridden: 4,
+};
+const FAMILY_COGNITION: Record<string, number> = { clear: 0, forgetful: 1, sometimes: 2, hard: 3 };
+const PROFILE_COGNITION = [0, 1, 2, 3, 3];
+const FAMILY_EATING: Record<string, number> = { self: 0, watch: 1, assist: 2, tube: 3 };
+const FAMILY_TOILET: Record<string, number> = { toilet: 0, pants: 1, diaper: 2, catheter: 3 };
+
+type AddGap = (questionId: string, magnitude: number, explain: string, kind?: Gap["kind"]) => void;
+
+function currentSurveyGaps(
+  p: ResidentProfile,
+  acc: Acceptance,
+  answers: SurveyAnswers,
+  sev: number,
+  fall: boolean,
+  add: AddGap,
+  wishes: string[],
+) {
+  const qs = buildSurvey(p);
+  const label = (id: string) => labelOf(qs, id, asText(answers[id]));
+
+  // ご家族の認識と資料の差。ご家族が「もっとできる」と思っているほど大きく見る。
+  // 入居後に「うちの親はもっとできるはず」という期待とのすれ違いになりやすいため。
+  const perception = (id: string, family: number | undefined, actual: number, actualText: string, what: string) => {
+    if (family === undefined || family >= actual) return;
+    const diff = actual - family;
+    add(
+      id,
+      diff * 2,
+      `ご家族は${what}を「${label(id)}」と考えているが、資料では「${actualText}」。今の状態を資料と面談の内容をもとに丁寧に説明し、見学や面談で実際の様子を一緒に確認する`,
+      "perception",
+    );
+  };
+  const fc = answers.f_careLevel;
+  if (typeof fc === "string" && /^[1-7]$/.test(fc)) {
+    perception("f_careLevel", Number(fc), p.careLevel, CARE_LEVEL_LABELS[p.careLevel], "要介護度");
+  }
+  perception(
+    "f_mobility",
+    FAMILY_MOBILITY[asText(answers.f_mobility)],
+    PROFILE_MOBILITY[p.physical.mobility],
+    MOBILITY_LABELS[p.physical.mobility],
+    "移動",
+  );
+  perception(
+    "f_cognition",
+    FAMILY_COGNITION[asText(answers.f_cognition)],
+    PROFILE_COGNITION[p.cognition.dementiaLevel],
+    `認知症：${DEMENTIA_LABELS[p.cognition.dementiaLevel].split("（")[0]}`,
+    "もの忘れや会話の様子",
+  );
+  const tube = (["tubeGastric", "tubeEnteric", "tubeNasal", "ivh"] as const).some((id) => p.medical[id] !== "none");
+  if (tube) perception("f_eating", FAMILY_EATING[asText(answers.f_eating)], 3, "経管栄養など", "食事");
+  if (p.medical.urinaryCatheter !== "none") {
+    perception("f_toilet", FAMILY_TOILET[asText(answers.f_toilet)], 3, "尿道留置カテーテル（バルーン）", "排泄");
+  } else if (p.physical.mobility === "bedridden" || p.physical.mobility === "full") {
+    perception("f_toilet", FAMILY_TOILET[asText(answers.f_toilet)], 2, `移動：${MOBILITY_LABELS[p.physical.mobility]}`, "排泄");
+  }
+
+  // 報告の頻度
+  switch (answers.f_reportFrequency) {
+    case "daily":
+      add(
+        "f_reportFrequency",
+        acc.contactsMinorChanges ? 2 : 3,
+        "毎日の様子を細かく知りたい希望がある。職員の負担が大きく、連絡の漏れが不満につながりやすいため、連絡する場面と方法（面会・電話・連絡帳）を入居前に取り決める",
+      );
+      break;
+    case "weekly":
+      if (!acc.contactsMinorChanges) {
+        add("f_reportFrequency", 1.5, "毎週の報告を希望している。施設の連絡体制で対応できる範囲を入居前にすり合わせる");
+      }
+      break;
+    case "monthly":
+      if (!acc.routineReport) {
+        add("f_reportFrequency", 1.5, "月1回の定期報告を希望しているが、施設では定期報告をしていない。連絡の方法を入居前にすり合わせる");
+      }
+      break;
+  }
+
+  // 一番大切にしてほしいこと
+  if (answers.f_priority === "absoluteSafety") {
+    add(
+      "f_priority",
+      fall ? 4 : 3,
+      "事故が「絶対に」起きないことを一番に望んでいる。転倒などを完全には防げないことを入居前に説明し、転倒リスク説明・同意書（念書）で合意しておく",
+    );
+  } else if (answers.f_priority === "medical" && !hasNightNurse(acc)) {
+    add("f_priority", 2 * sev, "医療体制の充実を一番に望んでいる。夜間は看護師が常駐していないことなど、対応できる範囲を入居前に説明する");
+  }
+
+  // 看取り
+  if (answers.f_endOfLife === "prolong") {
+    add(
+      "f_endOfLife",
+      1.5 * sev,
+      "延命治療を希望している。施設の医療体制で対応できない処置が必要になったときの流れ（入院・転居）を入居前に話し合う",
+    );
+  } else if (answers.f_endOfLife === "natural" && !offersEndOfLife(acc)) {
+    add("f_endOfLife", 2 * sev, "施設での自然な看取りを望んでいるが、施設は看取りに対応していない。最期の過ごし方の方針を入居前に説明する");
+  } else if (answers.f_endOfLife === "undecided") {
+    add("f_endOfLife", 1 * sev, "看取りの方針はまだ決まっていない。施設の看取りの方針を説明し、一緒に考える場を設ける");
+  }
+
+  // 記録として残すこと（ずれではないもの）
+  if (asText(answers.f_applicantName).trim()) {
+    wishes.push(`お申込み：${asText(answers.f_applicantName).trim()}（${label("f_relation")}）・連絡先：${asText(answers.f_contact).trim()}`);
+  }
+  if (answers.f_otherFamily) wishes.push(`ほかのご家族：${label("f_otherFamily")}`);
+  if (answers.f_caregiver) wishes.push(`これまでの介護：${label("f_caregiver")}`);
+  if (answers.f_reportFrequency) wishes.push(`報告の希望：${label("f_reportFrequency")}`);
+  for (const [id, title] of [
+    ["f_reason", "入居を考えた理由"],
+    ["f_requests", "ご要望"],
+  ] as const) {
+    const t = asText(answers[id]).trim();
+    if (t) wishes.push(`${title}：${t.slice(0, 200)}`);
+  }
+}
+
 export function filterGaps(gaps: Gap[], sensitivity: FacilitySettings["gapSensitivity"]): Gap[] {
   const allowed: GapLevel[] =
     sensitivity === "low" ? ["大"] : sensitivity === "normal" ? ["大", "中"] : ["大", "中", "小"];
@@ -368,6 +499,10 @@ const CLAUSES: Record<string, string> = {
   q4_contact: "施設からご家族への連絡は、ケガ・体調の変化があったときを基本とし、それ以外の連絡の頻度と方法は入居時に取り決める。",
   q5_endOfLife: "終末期の対応方針は、「急変時・終末期の対応方針についての確認書」により確認し、状態の変化に応じて見直す。",
   q6_emergency: "急変時の対応手順と連絡の順番は、「急変時・終末期の対応方針についての確認書」のとおりとする。",
+  f_reportFrequency: "施設からご家族への連絡は、ケガ・体調の変化があったときを基本とし、それ以外の連絡の頻度と方法は入居時に取り決める。",
+  f_priority: "施設は事故の防止に努めるが、転倒などの事故を完全に防ぐことはできないことを説明し、「転倒リスクに関するご説明と同意書」によりご家族の理解を得た。",
+  f_endOfLife: "終末期の対応方針は、「急変時・終末期の対応方針についての確認書」により確認し、状態の変化に応じて見直す。",
+  f_careLevel: "入居時のご本人の状態は、診療情報提供書等の資料と面談で確認した内容を基準とし、ご家族に説明した。",
   q7_differentCare: "ケアの方針について施設とご家族の意見が異なる場合は、施設が理由を説明し、ご本人の意思と安全を踏まえて協議のうえ決める。",
 };
 
@@ -382,12 +517,14 @@ function specialClauses(
   const lines: string[] = [];
   const seen = new Set<string>();
   for (const g of gaps) {
-    if (g.level === "小" || seen.has(g.questionId)) continue;
-    seen.add(g.questionId);
-    const c = CLAUSES[g.questionId];
+    // 状態の受け止め方の差（要介護度・移動・食事など）は、1つの条項にまとめる
+    const key = g.kind === "perception" ? "f_careLevel" : g.questionId;
+    if (g.level === "小" || seen.has(key)) continue;
+    seen.add(key);
+    const c = CLAUSES[key];
     if (c) lines.push(c);
   }
-  if (fall && !seen.has("q3_falls")) lines.push(CLAUSES.q3_falls);
+  if (fall && !seen.has("q3_falls") && !seen.has("f_priority")) lines.push(CLAUSES.q3_falls);
   if (medicalScore >= 3 && !hasNightNurse(acc)) {
     lines.push("夜間は看護師が常駐していないため、夜間の急変時には救急搬送を優先する場合がある。");
   }
@@ -474,8 +611,10 @@ export function judge({ residentName, profile: raw, settings, answers, interview
   if (grade !== "D" && grade !== "E") {
     const facility = settings.facilityName || "施設";
     const resident = residentName || "ご本人";
-    if (fall || answers?.q3_falls === "noInjury") documents.push(fallConsent(resident, facility));
-    const eolGap = allGaps.some((g) => g.questionId === "q5_endOfLife" || g.questionId === "q6_emergency");
+    if (fall || answers?.q3_falls === "noInjury" || answers?.f_priority === "absoluteSafety") {
+      documents.push(fallConsent(resident, facility));
+    }
+    const eolGap = allGaps.some((g) => ["q5_endOfLife", "f_endOfLife", "q6_emergency"].includes(g.questionId));
     if (eolGap || answers?.q6_emergency) documents.push(emergencyPolicy(resident, facility, acc));
     const clauses = specialClauses(resident, facility, allGaps, fall, scores.medical, acc);
     if (clauses) documents.push(clauses);
