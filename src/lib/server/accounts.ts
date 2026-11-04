@@ -1,7 +1,8 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { defaultSettings } from "@/lib/domain/presets";
-import { adminAuth, db } from "./firebaseAdmin";
+import { adminAuth, bucket, db } from "./firebaseAdmin";
+import { isOperatorEmail } from "./http";
 import { HttpError } from "./http";
 
 // アカウント（Firebase Authentication のユーザー）と施設の管理。
@@ -182,4 +183,56 @@ export async function setupLinkForMember(fid: string, uid: string, origin: strin
   const u = await adminAuth().getUser(uid).catch(() => null);
   if (!u || u.customClaims?.facilityId !== fid || !u.email) throw new HttpError(404, "スタッフが見つかりません");
   return { email: u.email, link: await passwordSetupLink(u.email, origin) };
+}
+
+/**
+ * 施設を削除する（運営者向け）。元に戻せない。
+ * 入居者・判定・設定の履歴（Firestore）、資料ファイル（Storage）、アンケートの URL の記録、
+ * この施設のアカウントを消す。運営者のアカウントは消さず、施設との紐づけだけを外す。
+ * 誤操作を防ぐため、施設名の入力が一致したときだけ消す。
+ */
+export async function deleteFacility(fid: string, confirmName: string) {
+  const ref = db().collection("facilities").doc(fid);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpError(404, "施設が見つかりません");
+  const name = (snap.data() as { settings?: { facilityName?: string } }).settings?.facilityName ?? "";
+  // 施設名が空なら施設 ID で確かめる（空欄のまま消せないように）
+  const expected = name.trim() || fid;
+  if (confirmName.trim() !== expected) throw new HttpError(400, "確認のために入力した施設名が一致しません");
+
+  // アンケートの URL の記録（施設の外のコレクション）
+  const residents = await ref.collection("residents").get();
+  for (const r of residents.docs) {
+    const tokenHash = (r.data() as { survey?: { tokenHash?: string } }).survey?.tokenHash;
+    if (tokenHash) await db().collection("surveyTokens").doc(tokenHash).delete();
+  }
+  // 資料ファイル
+  await bucket().deleteFiles({ prefix: `facilities/${fid}/` });
+  // 施設のデータ（入居者・判定・設定の履歴など）
+  await db().recursiveDelete(ref);
+
+  // アカウント
+  let deletedAccounts = 0;
+  let pageToken: string | undefined;
+  const toDelete: string[] = [];
+  do {
+    const page = await adminAuth().listUsers(1000, pageToken);
+    for (const u of page.users) {
+      if (u.customClaims?.facilityId !== fid) continue;
+      if (isOperatorEmail(u.email)) {
+        const { facilityId: _f, role: _r, ...rest } = u.customClaims ?? {};
+        void _f;
+        void _r;
+        await adminAuth().setCustomUserClaims(u.uid, rest);
+      } else {
+        toDelete.push(u.uid);
+      }
+    }
+    pageToken = page.pageToken;
+  } while (pageToken);
+  if (toDelete.length) {
+    await adminAuth().deleteUsers(toDelete);
+    deletedAccounts = toDelete.length;
+  }
+  return { name, residents: residents.docs.length, deletedAccounts };
 }

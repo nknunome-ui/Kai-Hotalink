@@ -224,6 +224,67 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
           ＋ 管理者を追加
         </button>
       )}
+      <DeleteFacility f={f} onDone={onDone} />
     </li>
+  );
+}
+
+/** 施設の削除。元に戻せないので、施設名を入力してから消す */
+function DeleteFacility({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => void }) {
+  const { api } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // 施設名が空なら施設 ID を入れてもらう（空欄のまま消せないように）
+  const expected = f.name.trim() || f.id;
+  const matches = name.trim() === expected;
+
+  async function remove(e: FormEvent) {
+    e.preventDefault();
+    if (!matches) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ residents: number; deletedAccounts: number }>(`/api/operator/facilities/${f.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirmName: name }),
+      });
+      onDone({
+        tone: "info",
+        text: `「${f.name || f.id}」を削除しました（入居者 ${r.residents}人のデータ、アカウント ${r.deletedAccounts}件）。`,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "削除できませんでした");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="mt-3 ml-5 text-[13px] text-alert hover:underline" onClick={() => setOpen(true)}>
+        施設を削除
+      </button>
+    );
+  }
+  return (
+    <form onSubmit={remove} className="mt-4 space-y-3 rounded-2xl border-2 border-alert/40 bg-alert-soft p-4">
+      <p className="text-[14px] font-bold text-alert">「{f.name || f.id}」を削除します。元に戻せません。</p>
+      <p className="text-[13px] leading-relaxed">
+        この施設の入居者・資料ファイル・判定・アンケート・受け入れ設定と、この施設のスタッフのアカウント（{f.admins.length}人の管理者を含む）がすべて消えます。
+      </p>
+      <Field label={f.name.trim() ? `確認のため、施設名「${expected}」を入力してください` : `確認のため、施設 ID「${expected}」を入力してください`}>
+        <Input value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      {error && <Notice tone="alert">{error}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="danger" busy={busy} disabled={!matches} className="border-2 border-alert">
+          削除する
+        </Button>
+        <Button type="button" variant="quiet" onClick={() => setOpen(false)}>
+          やめる
+        </Button>
+      </div>
+    </form>
   );
 }

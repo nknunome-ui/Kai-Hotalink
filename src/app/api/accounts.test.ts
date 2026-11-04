@@ -15,15 +15,22 @@ const state = vi.hoisted(() => ({
   users: new Map<string, FakeUser>(),
   revoked: [] as string[],
   seq: 0,
+  files: new Set<string>(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("next/navigation", () => ({ unstable_rethrow: () => {} }));
 vi.mock("@/lib/server/firebaseAdmin", () => {
+  const files = state.files;
   const byEmail = (email: string) => [...state.users.values()].find((u) => u.email === email);
   return {
     db: () => state.mem,
+    bucket: () => ({
+      deleteFiles: async ({ prefix }: { prefix: string }) => {
+        for (const f of [...files]) if (f.startsWith(prefix)) files.delete(f);
+      },
+    }),
     adminAuth: () => ({
       // トークンは「uid」をそのまま使う
       verifyIdToken: async (token: string) => {
@@ -52,6 +59,10 @@ vi.mock("@/lib/server/firebaseAdmin", () => {
       },
       updateUser: async (uid: string, patch: Partial<FakeUser>) => Object.assign(state.users.get(uid)!, patch),
       revokeRefreshTokens: async (uid: string) => void state.revoked.push(uid),
+      deleteUsers: async (uids: string[]) => {
+        for (const u of uids) state.users.delete(u);
+        return { successCount: uids.length, failureCount: 0, errors: [] };
+      },
       generatePasswordResetLink: async (email: string) =>
         `https://example.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode=code-for-${email}&apiKey=x`,
     }),
@@ -63,6 +74,7 @@ const staffOne = await import("./staff/[uid]/route");
 const facilities = await import("./operator/facilities/route");
 const facilityAdmins = await import("./operator/facilities/[id]/admins/route");
 const staffLink = await import("./staff/[uid]/setup-link/route");
+const facilityOne = await import("./operator/facilities/[id]/route");
 const adminLink = await import("./operator/facilities/[id]/admins/[uid]/setup-link/route");
 const me = await import("./me/route");
 
@@ -81,6 +93,7 @@ const user = (uid: string, email: string, claims?: Record<string, unknown>) =>
 beforeEach(() => {
   state.mem = new MemoryDb();
   state.users.clear();
+  state.files.clear();
   state.revoked = [];
   user("adminA", "admin@a.jp", { facilityId: "fa", role: "admin" });
   user("staffA", "staff@a.jp", { facilityId: "fa", role: "staff" });
@@ -170,5 +183,33 @@ describe("施設の追加（運営者）", () => {
     expect((await json(await adminLink.POST(req("op", {}), params({ id: "fa", uid: "adminA" })))).body.email).toBe("admin@a.jp");
     expect((await adminLink.POST(req("op", {}), params({ id: "fb", uid: "adminA" }))).status).toBe(404);
     expect((await adminLink.POST(req("adminA", {}), params({ id: "fa", uid: "adminA" }))).status).toBe(403);
+  });
+
+  it("施設の削除: 施設名が一致したときだけ、データ・ファイル・アンケートの記録・アカウントを消す。運営者は紐づけだけ外す", async () => {
+    const fa = state.mem.collection("facilities").doc("fa");
+    fa.setSync({ settings: { facilityName: "ひだまりの家" } });
+    fa.collection("residents").doc("r1").setSync({ name: "山田", survey: { tokenHash: "h1" } });
+    fa.collection("residents").doc("r1").collection("judgments").doc("j1").setSync({ grade: "A" });
+    state.mem.collection("surveyTokens").doc("h1").setSync({ facilityId: "fa" });
+    state.mem.collection("facilities").doc("fb").setSync({ settings: { facilityName: "別の家" } });
+    state.files.add("facilities/fa/residents/r1/doc.pdf");
+    state.files.add("facilities/fb/residents/r9/doc.pdf");
+    user("op2", "other@example.jp", { facilityId: "fa", role: "admin" }); // 運営者が施設の管理者も兼ねている
+
+    const del = (confirmName: string, token = "op") =>
+      facilityOne.DELETE(req(token, { confirmName }, "DELETE"), params({ id: "fa" }));
+    expect((await del("ちがう名前")).status).toBe(400);
+    expect((await del("ひだまりの家", "adminA")).status).toBe(403);
+
+    const r = await json(await del(" ひだまりの家 "));
+    expect(r.body).toMatchObject({ name: "ひだまりの家", residents: 1, deletedAccounts: 2 });
+    expect([...state.mem.store.keys()].filter((k) => k.startsWith("facilities/fa"))).toEqual([]);
+    expect(state.mem.store.has("surveyTokens/h1")).toBe(false);
+    expect([...state.files]).toEqual(["facilities/fb/residents/r9/doc.pdf"]);
+    expect(state.users.has("adminA") || state.users.has("staffA")).toBe(false);
+    expect(state.users.get("staffB")).toBeDefined(); // ほかの施設のアカウントは残る
+    expect(state.users.get("op2")!.customClaims).toEqual({});
+    expect(state.mem.store.has("facilities/fb")).toBe(true);
+    expect((await del("ひだまりの家")).status).toBe(404);
   });
 });
