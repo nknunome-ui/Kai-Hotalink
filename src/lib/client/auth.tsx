@@ -9,6 +9,8 @@ export interface Me {
   facilityId: string;
   facilityName: string;
   aiEnabled: boolean;
+  /** 施設を追加できる運営者か */
+  operator: boolean;
 }
 
 interface AuthState {

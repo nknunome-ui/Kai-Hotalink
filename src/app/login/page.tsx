@@ -2,7 +2,7 @@
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { clientAuth } from "@/lib/client/firebase";
+import { clientAuth, sendPasswordSetupEmail } from "@/lib/client/firebase";
 import { Button, Field, Input, Logo, Notice } from "@/components/ui";
 
 export default function LoginPage() {
@@ -58,8 +58,75 @@ export default function LoginPage() {
             ログイン
           </Button>
         </form>
+        <ForgotPassword initialEmail={email} />
         <p className="mt-6 text-[12px] text-mute">アカウントは施設の管理者が発行します。</p>
       </div>
     </main>
+  );
+}
+
+/** パスワードを忘れたときに、再設定のメールを送る */
+function ForgotPassword({ initialEmail }: { initialEmail: string }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "info" | "alert"; text: string } | null>(null);
+
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await sendPasswordSetupEmail(email.trim());
+      // アカウントがあるかどうかは伝えない（他人のメールアドレスの登録有無を調べられないように）
+      setMsg({
+        tone: "info",
+        text: "登録されているメールアドレスなら、パスワード再設定のメールを送りました。届かない場合は迷惑メールフォルダもご確認ください。",
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code ?? "";
+      setMsg({
+        tone: "alert",
+        text:
+          code === "auth/invalid-email"
+            ? "メールアドレスの形式が正しくありません"
+            : code === "auth/too-many-requests"
+              ? "送信が多すぎます。しばらく待ってからもう一度お試しください"
+              : "メールを送れませんでした。時間をおいてもう一度お試しください",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="mt-4 text-[14px] font-bold text-brand-strong underline-offset-4 hover:underline"
+        onClick={() => {
+          setEmail(initialEmail);
+          setOpen(true);
+        }}
+      >
+        パスワードを忘れた方
+      </button>
+    );
+  }
+  return (
+    <form onSubmit={send} className="mt-5 space-y-3 rounded-2xl bg-paper p-4">
+      <p className="text-[14px] font-bold">パスワードの再設定</p>
+      <p className="text-[13px] text-ink-soft">登録しているメールアドレスに、パスワード再設定のメールを送ります。</p>
+      <Input type="email" required aria-label="メールアドレス" value={email} onChange={(e) => setEmail(e.target.value)} />
+      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <div className="flex gap-2">
+        <Button type="submit" busy={busy} className="min-h-10">
+          メールを送る
+        </Button>
+        <Button type="button" variant="quiet" className="min-h-10" onClick={() => setOpen(false)}>
+          閉じる
+        </Button>
+      </div>
+    </form>
   );
 }

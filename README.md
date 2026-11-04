@@ -70,6 +70,14 @@ npm run dev                   # http://localhost:3000
 2. **Environment Variables** に `.env.example` の項目をすべて登録（`FIREBASE_PRIVATE_KEY` は改行を `\n` にした1行で）
 3. デプロイ後、`NEXT_PUBLIC_APP_URL` に本番の URL を入れて再デプロイ
 4. Firebase コンソール → Authentication → 設定 → **承認済みドメイン**に Vercel のドメインを追加
+5. Firebase コンソール → Authentication → **テンプレート** → 「パスワードの再設定」の言語を日本語にする（招待メールにもこのメールを使う）
+
+### 4. アカウントの作り方
+
+- **新しい施設**：運営者が「施設の追加」画面で施設名と管理者のメールアドレスを入れる。管理者にパスワード設定のメールが届く。運営者は Vercel の環境変数 `OPERATOR_EMAILS` に登録したメールアドレスの人（運営者もログインには自分のアカウントが必要）
+- **スタッフ**：施設の管理者が「スタッフ管理」画面で招待する。権限の変更・停止もここで行う
+- **パスワードを忘れたとき**：ログイン画面の「パスワードを忘れた方」から再設定のメールを送る
+- 最初の1人（運営者自身のアカウント）だけは、上の `npm run create-staff` で作る
 
 関数のリージョンは `vercel.json` で東京（`hnd1`）にしています。Vercel の関数では ESM 専用パッケージを `require()` できないため、`package.json` の `overrides` で firebase-admin が使う jwks-rsa の jose を CommonJS 版（v5）に固定しています（外すと `ERR_REQUIRE_ESM` で API がすべて 500 になります）。
 

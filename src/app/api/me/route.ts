@@ -1,5 +1,5 @@
 import { aiEnabled } from "@/lib/server/claude";
-import { handle, requireStaff } from "@/lib/server/http";
+import { handle, isOperatorEmail, requireStaff } from "@/lib/server/http";
 import { getSettings } from "@/lib/server/repo";
 
 export const GET = handle(async (req: Request) => {
@@ -11,5 +11,6 @@ export const GET = handle(async (req: Request) => {
     facilityId: staff.facilityId,
     facilityName: settings.facilityName,
     aiEnabled: aiEnabled(),
+    operator: isOperatorEmail(staff.email),
   });
 });
