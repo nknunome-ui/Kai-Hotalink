@@ -101,8 +101,8 @@ describe("スタッフ管理（施設の管理者）", () => {
     const r = await json(await staffRoute.POST(req("adminA", { email: " New@A.jp ", role: "staff" })));
     expect(r.body).toMatchObject({ email: "new@a.jp", created: true });
     expect(state.users.get(r.body.uid)!.customClaims).toEqual({ facilityId: "fa", role: "staff" });
-    // メールが届かないとき用のリンクも返す（設定後はログイン画面に戻る）
-    expect(r.body.link).toContain("email=new@a.jp&continue=http://localhost/login");
+    // 招待ではリンクを作らない（作るとメールのリンクが使えなくなるため）
+    expect(r.body.link).toBeUndefined();
 
     const taken = await json(await staffRoute.POST(req("adminA", { email: "staff@b.jp", role: "staff" })));
     expect(taken.status).toBe(409);
@@ -162,7 +162,7 @@ describe("施設の追加（運営者）", () => {
   it("パスワード設定用のリンクは、自分の施設のスタッフ（運営者は指定した施設の管理者）のぶんだけ作れる", async () => {
     const mine = await json(await staffLink.POST(req("adminA", {}), params({ uid: "staffA" })));
     expect(mine.body).toMatchObject({ email: "staff@a.jp" });
-    expect(mine.body.link).toContain("email=staff@a.jp");
+    expect(mine.body.link).toContain("email=staff@a.jp&continue=http://localhost/login");
     expect((await staffLink.POST(req("adminA", {}), params({ uid: "staffB" }))).status).toBe(404);
     expect((await staffLink.POST(req("staffA", {}), params({ uid: "staffA" }))).status).toBe(403);
 
