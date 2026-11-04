@@ -1,4 +1,4 @@
-import { createFacility, listFacilities, normalizeEmail } from "@/lib/server/accounts";
+import { createFacility, listFacilities, normalizeEmail, passwordSetupLink } from "@/lib/server/accounts";
 import { handle, HttpError, readJson, requireOperator } from "@/lib/server/http";
 
 // 運営者向け: 施設の一覧と追加（追加すると最初の管理者を招待する）
@@ -14,5 +14,6 @@ export const POST = handle(async (req: Request) => {
   if (!name || name.length > 100) throw new HttpError(400, "施設名を100文字以内で入力してください");
   const adminEmail = normalizeEmail(body.adminEmail);
   const result = await createFacility(name, adminEmail, op.email);
-  return Response.json({ facilityId: result.id, adminEmail, created: result.admin.created });
+  const link = await passwordSetupLink(adminEmail, new URL(req.url).origin);
+  return Response.json({ facilityId: result.id, adminEmail, created: result.admin.created, link });
 });

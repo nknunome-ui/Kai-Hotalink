@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, Segmented, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
+import { SetupLink } from "@/components/SetupLink";
 import { sendPasswordSetupEmail } from "@/lib/client/firebase";
 
 interface StaffAccount {
@@ -23,6 +24,7 @@ export default function StaffPage() {
   const [list, setList] = useState<StaffAccount[] | null>(null);
   const [msg, setMsg] = useState<{ tone: "info" | "alert"; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [linkInfo, setLinkInfo] = useState<{ email: string; link: string } | null>(null);
 
   const load = useCallback(() => {
     api<{ staff: StaffAccount[] }>("/api/staff")
@@ -48,10 +50,16 @@ export default function StaffPage() {
     }
   }
 
+  // メールを送り、届かないとき用にリンクも出す
   const resend = (s: StaffAccount) =>
     run(`mail-${s.uid}`, async () => {
-      await sendPasswordSetupEmail(s.email);
-      return `${s.email} に、パスワード設定のメールを送りました。`;
+      setLinkInfo(await api<{ email: string; link: string }>(`/api/staff/${s.uid}/setup-link`, { method: "POST" }));
+      try {
+        await sendPasswordSetupEmail(s.email);
+        return `${s.email} に、パスワード設定のメールを送りました。届かないときは、下のリンクを本人に送ってください。`;
+      } catch {
+        return `${s.email} へのメールを送れませんでした。下のリンクを本人に送ってください。`;
+      }
     });
   const setRole = (s: StaffAccount, role: StaffAccount["role"]) =>
     run(`role-${s.uid}`, async () => {
@@ -73,8 +81,9 @@ export default function StaffPage() {
       </p>
 
       <InviteForm
-        onInvited={(text) => {
+        onInvited={(text, info) => {
           setMsg({ tone: "info", text });
+          setLinkInfo(info);
           load();
         }}
       />
@@ -82,6 +91,11 @@ export default function StaffPage() {
       {msg && (
         <div className="mt-5">
           <Notice tone={msg.tone}>{msg.text}</Notice>
+        </div>
+      )}
+      {linkInfo && (
+        <div className="mt-3">
+          <SetupLink email={linkInfo.email} link={linkInfo.link} onClose={() => setLinkInfo(null)} />
         </div>
       )}
 
@@ -122,7 +136,7 @@ export default function StaffPage() {
                     <div className="flex gap-1">
                       {!s.disabled && (
                         <Button variant="quiet" className="min-h-9 px-3 text-[13px]" busy={busy === `mail-${s.uid}`} onClick={() => resend(s)}>
-                          パスワード設定メール
+                          パスワード設定メール・リンク
                         </Button>
                       )}
                       <Button
@@ -148,7 +162,7 @@ export default function StaffPage() {
   );
 }
 
-function InviteForm({ onInvited }: { onInvited: (text: string) => void }) {
+function InviteForm({ onInvited }: { onInvited: (text: string, link: { email: string; link: string }) => void }) {
   const { api } = useAuth();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "staff">("staff");
@@ -160,7 +174,7 @@ function InviteForm({ onInvited }: { onInvited: (text: string) => void }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ email: string; created: boolean }>("/api/staff", {
+      const r = await api<{ email: string; created: boolean; link: string }>("/api/staff", {
         method: "POST",
         body: JSON.stringify({ email, role }),
       });
@@ -168,13 +182,14 @@ function InviteForm({ onInvited }: { onInvited: (text: string) => void }) {
       try {
         await sendPasswordSetupEmail(r.email);
       } catch {
-        onInvited(`${r.email} を招待しましたが、メールを送れませんでした。一覧の「パスワード設定メール」からもう一度送ってください。`);
+        onInvited(`${r.email} を招待しましたが、メールを送れませんでした。下のリンクを本人に送ってください。`, r);
         return;
       }
       onInvited(
         r.created
-          ? `${r.email} を招待しました。パスワード設定のメールが届くので、設定してからログインしてもらってください。`
-          : `${r.email} はすでにアカウントがあったので、この施設に「${ROLE_LABELS[role]}」として追加し、パスワード設定のメールを送りました。`,
+          ? `${r.email} を招待しました。パスワード設定のメールが届くので、設定してからログインしてもらってください。届かないときは、下のリンクを本人に送ってください。`
+          : `${r.email} はすでにアカウントがあったので、この施設に「${ROLE_LABELS[role]}」として追加し、パスワード設定のメールを送りました。届かないときは、下のリンクを本人に送ってください。`,
+        r,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "招待できませんでした");

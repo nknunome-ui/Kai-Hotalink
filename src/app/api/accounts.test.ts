@@ -52,6 +52,8 @@ vi.mock("@/lib/server/firebaseAdmin", () => {
       },
       updateUser: async (uid: string, patch: Partial<FakeUser>) => Object.assign(state.users.get(uid)!, patch),
       revokeRefreshTokens: async (uid: string) => void state.revoked.push(uid),
+      generatePasswordResetLink: async (email: string, settings?: { url: string }) =>
+        `https://example.firebaseapp.com/__/auth/action?mode=resetPassword&email=${email}&continue=${settings?.url ?? ""}`,
     }),
   };
 });
@@ -60,6 +62,8 @@ const staffRoute = await import("./staff/route");
 const staffOne = await import("./staff/[uid]/route");
 const facilities = await import("./operator/facilities/route");
 const facilityAdmins = await import("./operator/facilities/[id]/admins/route");
+const staffLink = await import("./staff/[uid]/setup-link/route");
+const adminLink = await import("./operator/facilities/[id]/admins/[uid]/setup-link/route");
 const me = await import("./me/route");
 
 const req = (token: string | null, body?: unknown, method = body ? "POST" : "GET") =>
@@ -97,6 +101,8 @@ describe("スタッフ管理（施設の管理者）", () => {
     const r = await json(await staffRoute.POST(req("adminA", { email: " New@A.jp ", role: "staff" })));
     expect(r.body).toMatchObject({ email: "new@a.jp", created: true });
     expect(state.users.get(r.body.uid)!.customClaims).toEqual({ facilityId: "fa", role: "staff" });
+    // メールが届かないとき用のリンクも返す（設定後はログイン画面に戻る）
+    expect(r.body.link).toContain("email=new@a.jp&continue=http://localhost/login");
 
     const taken = await json(await staffRoute.POST(req("adminA", { email: "staff@b.jp", role: "staff" })));
     expect(taken.status).toBe(409);
@@ -151,5 +157,17 @@ describe("施設の追加（運営者）", () => {
 
     expect((await facilityAdmins.POST(req("op", { email: "x@x.jp" }), params({ id: "nope" }))).status).toBe(404);
     expect((await facilityAdmins.POST(req("adminA", { email: "x@x.jp" }), params({ id: "fa" }))).status).toBe(403);
+  });
+
+  it("パスワード設定用のリンクは、自分の施設のスタッフ（運営者は指定した施設の管理者）のぶんだけ作れる", async () => {
+    const mine = await json(await staffLink.POST(req("adminA", {}), params({ uid: "staffA" })));
+    expect(mine.body).toMatchObject({ email: "staff@a.jp" });
+    expect(mine.body.link).toContain("email=staff@a.jp");
+    expect((await staffLink.POST(req("adminA", {}), params({ uid: "staffB" }))).status).toBe(404);
+    expect((await staffLink.POST(req("staffA", {}), params({ uid: "staffA" }))).status).toBe(403);
+
+    expect((await json(await adminLink.POST(req("op", {}), params({ id: "fa", uid: "adminA" })))).body.email).toBe("admin@a.jp");
+    expect((await adminLink.POST(req("op", {}), params({ id: "fb", uid: "adminA" }))).status).toBe(404);
+    expect((await adminLink.POST(req("adminA", {}), params({ id: "fa", uid: "adminA" }))).status).toBe(403);
   });
 });

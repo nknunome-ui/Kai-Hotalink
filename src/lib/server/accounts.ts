@@ -164,3 +164,25 @@ export async function addFacilityAdmin(fid: string, email: string) {
   if (!snap.exists) throw new HttpError(404, "施設が見つかりません");
   return inviteStaff(fid, email, "admin");
 }
+
+/**
+ * パスワード設定用のリンクを作る（メールが届かないとき、LINE などで本人に送ってもらう）。
+ * 設定が終わったらこのアプリのログイン画面に戻す。戻り先のドメインが Firebase の
+ * 承認済みドメインに無いときは、戻り先なしのリンクにする。
+ */
+export async function passwordSetupLink(email: string, origin: string): Promise<string> {
+  try {
+    return await adminAuth().generatePasswordResetLink(email, { url: `${origin}/login` });
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? "";
+    if (!code.includes("continue-uri") && !code.includes("unauthorized-domain")) throw e;
+    return adminAuth().generatePasswordResetLink(email);
+  }
+}
+
+/** 施設の管理者・スタッフ本人のリンクだけを作れるようにする */
+export async function setupLinkForMember(fid: string, uid: string, origin: string): Promise<{ email: string; link: string }> {
+  const u = await adminAuth().getUser(uid).catch(() => null);
+  if (!u || u.customClaims?.facilityId !== fid || !u.email) throw new HttpError(404, "スタッフが見つかりません");
+  return { email: u.email, link: await passwordSetupLink(u.email, origin) };
+}
