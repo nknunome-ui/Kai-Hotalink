@@ -106,9 +106,26 @@ export interface FacilitySummary {
   name: string;
   createdAt: string | null;
   createdBy: string | null;
+  /** 施設の管理者 */
+  admins: { uid: string; email: string; disabled: boolean; lastSignInAt: string | null }[];
 }
 
+/** 施設の一覧と、それぞれの管理者 */
 export async function listFacilities(): Promise<FacilitySummary[]> {
+  const admins = new Map<string, FacilitySummary["admins"]>();
+  let pageToken: string | undefined;
+  do {
+    const page = await adminAuth().listUsers(1000, pageToken);
+    for (const u of page.users) {
+      const fid = u.customClaims?.facilityId;
+      if (typeof fid !== "string" || u.customClaims?.role !== "admin") continue;
+      const list = admins.get(fid) ?? [];
+      list.push({ uid: u.uid, email: u.email ?? "", disabled: u.disabled, lastSignInAt: toIso(u.metadata.lastSignInTime) });
+      admins.set(fid, list);
+    }
+    pageToken = page.pageToken;
+  } while (pageToken);
+
   const snap = await db().collection("facilities").get();
   return snap.docs
     .map((d) => {
@@ -118,6 +135,7 @@ export async function listFacilities(): Promise<FacilitySummary[]> {
         name: data.settings?.facilityName ?? "",
         createdAt: data.createdAt ?? null,
         createdBy: data.createdBy ?? null,
+        admins: (admins.get(d.id) ?? []).sort((x, y) => x.email.localeCompare(y.email)),
       };
     })
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
@@ -138,4 +156,11 @@ export async function createFacility(name: string, adminEmail: string, operatorE
     .set({ settings: defaultSettings(name), settingsVersion: 0, createdAt: at, createdBy: operatorEmail });
   const admin = await inviteStaff(id, adminEmail, "admin");
   return { id, admin };
+}
+
+/** 既存の施設に管理者を追加する（運営者向け） */
+export async function addFacilityAdmin(fid: string, email: string) {
+  const snap = await db().collection("facilities").doc(fid).get();
+  if (!snap.exists) throw new HttpError(404, "施設が見つかりません");
+  return inviteStaff(fid, email, "admin");
 }
