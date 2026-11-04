@@ -69,5 +69,14 @@ export function storageErrorMessage(e: unknown, fileName: string): string {
 export async function sendPasswordSetupEmail(email: string): Promise<void> {
   const auth = clientAuth();
   auth.languageCode = "ja";
-  await sendPasswordResetEmail(auth, email, { url: `${window.location.origin}/login` });
+  try {
+    await sendPasswordResetEmail(auth, email, { url: `${window.location.origin}/login` });
+  } catch (e) {
+    // このサイトのドメインが Firebase の「承認済みドメイン」に無いと、戻り先付きでは送れない。
+    // そのときは戻り先なしで送る（設定後にログイン画面へ自動では戻らないが、メールは届く）
+    const code = (e as { code?: string }).code;
+    if (code !== "auth/unauthorized-continue-uri" && code !== "auth/invalid-continue-uri") throw e;
+    console.warn(`${window.location.hostname} を Firebase の承認済みドメインに追加してください`);
+    await sendPasswordResetEmail(auth, email);
+  }
 }
