@@ -35,6 +35,11 @@ if (!/^[a-z0-9-]{2,40}$/.test(facility)) {
   console.error("--facility は英小文字・数字・ハイフンの2〜40文字にしてください");
   process.exit(1);
 }
+// Mac の「スマート引用符」で ' が ‘ ’ に変わると、引用符までパスワードに入ってしまう
+if (password && /[‘’“”]/.test(password)) {
+  console.error("パスワードにカーブした引用符（‘ ’ “ ”）が入っています。まっすぐな ' で囲んで、もう一度実行してください");
+  process.exit(1);
+}
 if (!["admin", "staff"].includes(role)) {
   console.error("--role は admin か staff にしてください");
   process.exit(1);

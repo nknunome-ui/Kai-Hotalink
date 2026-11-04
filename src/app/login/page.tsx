@@ -27,8 +27,17 @@ export default function LoginPage() {
         "auth/too-many-requests": "ログインの試行が多すぎます。しばらく待ってからもう一度お試しください",
         "auth/network-request-failed": "通信できませんでした。ネットワークを確認してください",
         "auth/invalid-api-key": ".env.local の NEXT_PUBLIC_FIREBASE_API_KEY が正しくありません",
+        "auth/user-disabled": "このアカウントは停止されています。施設の管理者に確認してください",
+        "auth/password-does-not-meet-requirements":
+          "パスワードが Firebase のパスワード ポリシーの条件を満たしていません。「パスワードを忘れた方」から、条件に合うパスワードを設定し直してください",
       };
-      setError(messages[code] ?? "メールアドレスかパスワードが違います（アカウントが未作成の可能性もあります）");
+      const wrong = ["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found", "auth/invalid-email"];
+      setError(
+        messages[code] ??
+          (wrong.includes(code)
+            ? "メールアドレスかパスワードが違います（アカウントが未作成の可能性もあります）"
+            : `ログインできませんでした（${code || "原因不明"}）。この表示を施設の管理者か運営者に伝えてください`),
+      );
       setBusy(false);
     }
   }
