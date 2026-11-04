@@ -59,6 +59,7 @@ vi.mock("@/lib/server/firebaseAdmin", () => {
 const staffRoute = await import("./staff/route");
 const staffOne = await import("./staff/[uid]/route");
 const facilities = await import("./operator/facilities/route");
+const facilityAdmins = await import("./operator/facilities/[id]/admins/route");
 const me = await import("./me/route");
 
 const req = (token: string | null, body?: unknown, method = body ? "POST" : "GET") =>
@@ -81,13 +82,14 @@ beforeEach(() => {
   user("staffA", "staff@a.jp", { facilityId: "fa", role: "staff" });
   user("staffB", "staff@b.jp", { facilityId: "fb", role: "staff" });
   process.env.OPERATOR_EMAILS = " Op@Example.jp , other@example.jp";
-  user("op", "op@example.jp", { facilityId: "fa", role: "admin" });
+  // 運営者は施設に所属していなくてもよい
+  user("op", "op@example.jp");
 });
 
 describe("スタッフ管理（施設の管理者）", () => {
   it("一覧は自分の施設のスタッフだけ。スタッフ権限では使えない", async () => {
     const r = await json(await staffRoute.GET(req("adminA")));
-    expect(r.body.staff.map((s: { email: string }) => s.email)).toEqual(["admin@a.jp", "op@example.jp", "staff@a.jp"]);
+    expect(r.body.staff.map((s: { email: string }) => s.email)).toEqual(["admin@a.jp", "staff@a.jp"]);
     expect((await staffRoute.GET(req("staffA"))).status).toBe(403);
   });
 
@@ -118,7 +120,7 @@ describe("スタッフ管理（施設の管理者）", () => {
 describe("施設の追加（運営者）", () => {
   it("OPERATOR_EMAILS に入っている人だけが使え、/api/me にも運営者かどうかを返す", async () => {
     expect((await facilities.GET(req("adminA"))).status).toBe(403);
-    expect((await json(await me.GET(req("op")))).body.operator).toBe(true);
+    expect((await json(await me.GET(req("op")))).body).toMatchObject({ operator: true, facilityId: "" });
     expect((await json(await me.GET(req("adminA")))).body.operator).toBe(false);
   });
 
@@ -135,5 +137,19 @@ describe("施設の追加（運営者）", () => {
     const before = (await json(await facilities.GET(req("op")))).body.facilities.length;
     expect((await facilities.POST(req("op", { name: "別の家", adminEmail: "staff@b.jp" }))).status).toBe(409);
     expect((await json(await facilities.GET(req("op")))).body.facilities.length).toBe(before);
+  });
+
+  it("施設の一覧に管理者を出し、既存の施設に管理者を追加できる。無い施設には追加しない", async () => {
+    state.mem.collection("facilities").doc("fa").setSync({ settings: { facilityName: "ひだまりの家" } });
+    const before = (await json(await facilities.GET(req("op")))).body.facilities.find((f: { id: string }) => f.id === "fa");
+    expect(before.admins.map((a: { email: string }) => a.email)).toEqual(["admin@a.jp"]);
+
+    const r = await json(await facilityAdmins.POST(req("op", { email: "boss2@a.jp" }), params({ id: "fa" })));
+    expect(r.body).toMatchObject({ email: "boss2@a.jp", created: true });
+    const after = (await json(await facilities.GET(req("op")))).body.facilities.find((f: { id: string }) => f.id === "fa");
+    expect(after.admins.map((a: { email: string }) => a.email)).toEqual(["admin@a.jp", "boss2@a.jp"]);
+
+    expect((await facilityAdmins.POST(req("op", { email: "x@x.jp" }), params({ id: "nope" }))).status).toBe(404);
+    expect((await facilityAdmins.POST(req("adminA", { email: "x@x.jp" }), params({ id: "fa" }))).status).toBe(403);
   });
 });

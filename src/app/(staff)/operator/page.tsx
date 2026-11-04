@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Button, Field, Input, Notice } from "@/components/ui";
+import { Button, Field, Input, Notice, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { sendPasswordSetupEmail } from "@/lib/client/firebase";
 
@@ -9,19 +9,32 @@ interface FacilitySummary {
   name: string;
   createdAt: string | null;
   createdBy: string | null;
+  admins: { uid: string; email: string; disabled: boolean; lastSignInAt: string | null }[];
 }
+
+type Msg = { tone: "info" | "alert"; text: string };
 
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("ja-JP", { year: "numeric", month: "numeric", day: "numeric" }) : "—";
 
-/** 運営者向け: 新しい施設を追加し、最初の管理者を招待する */
+/** メールを送り、送れなかったときは「パスワードを忘れた方」からの設定を案内する */
+async function sendSetup(email: string, done: string): Promise<Msg> {
+  try {
+    await sendPasswordSetupEmail(email);
+    return { tone: "info", text: `${done}${email} にパスワード設定のメールを送りました。` };
+  } catch {
+    return {
+      tone: "alert",
+      text: `${done}${email} へのメールを送れませんでした。ログイン画面の「パスワードを忘れた方」から設定してもらってください。`,
+    };
+  }
+}
+
+/** 運営者向け: 施設の一覧・追加と、施設の管理者の追加 */
 export default function OperatorPage() {
   const { api, me } = useAuth();
   const [list, setList] = useState<FacilitySummary[] | null>(null);
-  const [name, setName] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ tone: "info" | "alert"; text: string } | null>(null);
+  const [msg, setMsg] = useState<Msg | null>(null);
 
   const load = useCallback(() => {
     api<{ facilities: FacilitySummary[] }>("/api/operator/facilities")
@@ -34,52 +47,19 @@ export default function OperatorPage() {
 
   if (me && !me.operator) return <Notice tone="alert">この画面は運営者だけが使えます。</Notice>;
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMsg(null);
-    try {
-      const r = await api<{ adminEmail: string }>("/api/operator/facilities", {
-        method: "POST",
-        body: JSON.stringify({ name, adminEmail }),
-      });
-      try {
-        await sendPasswordSetupEmail(r.adminEmail);
-        setMsg({ tone: "info", text: `「${name}」を追加し、${r.adminEmail} にパスワード設定のメールを送りました。` });
-      } catch {
-        setMsg({
-          tone: "alert",
-          text: `「${name}」は追加しましたが、${r.adminEmail} へのメールを送れませんでした。管理者の方に、ログイン画面の「パスワードを忘れた方」から設定してもらってください。`,
-        });
-      }
-      setName("");
-      setAdminEmail("");
-      load();
-    } catch (e) {
-      setMsg({ tone: "alert", text: e instanceof Error ? e.message : "追加できませんでした" });
-    } finally {
-      setBusy(false);
-    }
-  }
+  const report = (m: Msg) => {
+    setMsg(m);
+    load();
+  };
 
   return (
     <div className="max-w-3xl">
-      <h1 className="mb-1 text-[24px] font-bold">施設の追加</h1>
+      <h1 className="mb-1 text-[24px] font-bold">施設管理</h1>
       <p className="mb-6 text-[14px] text-ink-soft">
-        運営者だけが使える画面です。新しい施設を追加すると、施設の管理者にパスワード設定のメールが届きます。管理者は、ログイン後に受け入れ設定とスタッフの招待をします。
+        HotaLink を使う施設の追加と、施設の管理者の招待をします。施設の管理者は、ログイン後に受け入れ設定とスタッフの招待をします。
       </p>
 
-      <form onSubmit={submit} className="space-y-4 rounded-3xl border-2 border-brand-soft bg-sheet p-5 shadow-card sm:p-6">
-        <Field label="施設名" hint="家族アンケートや同意書の文案に表示されます。あとから受け入れ設定で変えられます。">
-          <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} placeholder="例：ひだまりの家" />
-        </Field>
-        <Field label="施設の管理者のメールアドレス">
-          <Input type="email" required value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
-        </Field>
-        <Button type="submit" busy={busy}>
-          施設を追加して招待メールを送る
-        </Button>
-      </form>
+      <AddFacilityForm onDone={report} />
 
       {msg && (
         <div className="mt-5">
@@ -88,25 +68,145 @@ export default function OperatorPage() {
       )}
 
       <section className="mt-6 rounded-3xl bg-sheet p-5 shadow-card sm:p-6">
-        <h2 className="mb-3 text-[18px] font-bold">施設の一覧</h2>
+        <h2 className="mb-3 text-[18px] font-bold">施設の一覧{list && `（${list.length}施設）`}</h2>
         {list === null ? (
           <p className="text-mute">読み込み中…</p>
         ) : list.length === 0 ? (
           <p className="text-ink-soft">まだ施設がありません。</p>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="space-y-3">
             {list.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-baseline gap-x-4 py-3">
-                <span className="min-w-0 flex-1 text-[15px] font-bold">{f.name || "（施設名なし）"}</span>
-                <span className="text-[12px] text-mute">ID：{f.id}</span>
-                <span className="text-[12px] text-mute">
-                  {fmt(f.createdAt)} 追加{f.createdBy && `（${f.createdBy}）`}
-                </span>
-              </li>
+              <FacilityRow key={f.id} f={f} onDone={report} />
             ))}
           </ul>
         )}
       </section>
     </div>
+  );
+}
+
+function AddFacilityForm({ onDone }: { onDone: (m: Msg) => void }) {
+  const { api } = useAuth();
+  const [name, setName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ adminEmail: string }>("/api/operator/facilities", {
+        method: "POST",
+        body: JSON.stringify({ name, adminEmail }),
+      });
+      onDone(await sendSetup(r.adminEmail, `「${name}」を追加しました。`));
+      setName("");
+      setAdminEmail("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "追加できませんでした");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4 rounded-3xl border-2 border-brand-soft bg-sheet p-5 shadow-card sm:p-6">
+      <h2 className="text-[18px] font-bold">施設を追加</h2>
+      <Field label="施設名" hint="家族アンケートや同意書の文案に表示されます。あとから施設の管理者が受け入れ設定で変えられます。">
+        <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} placeholder="例：ひだまりの家" />
+      </Field>
+      <Field label="施設の管理者のメールアドレス">
+        <Input type="email" required value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
+      </Field>
+      {error && <Notice tone="alert">{error}</Notice>}
+      <Button type="submit" busy={busy}>
+        施設を追加して招待メールを送る
+      </Button>
+    </form>
+  );
+}
+
+function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => void }) {
+  const { api } = useAuth();
+  const [adding, setAdding] = useState(false);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    setBusy("add");
+    try {
+      const r = await api<{ email: string }>(`/api/operator/facilities/${f.id}/admins`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      onDone(await sendSetup(r.email, `「${f.name}」の管理者に追加しました。`));
+      setEmail("");
+      setAdding(false);
+    } catch (e) {
+      onDone({ tone: "alert", text: e instanceof Error ? e.message : "追加できませんでした" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resend(adminEmail: string) {
+    setBusy(adminEmail);
+    onDone(await sendSetup(adminEmail, ""));
+    setBusy(null);
+  }
+
+  return (
+    <li className="rounded-2xl bg-paper p-4">
+      <div className="flex flex-wrap items-baseline gap-x-4">
+        <span className="min-w-0 flex-1 text-[16px] font-bold">{f.name || "（施設名なし）"}</span>
+        <span className="text-[12px] text-mute">
+          {fmt(f.createdAt)} 追加・ID：{f.id}
+        </span>
+      </div>
+      <p className="mt-2 mb-1 text-[12px] font-bold text-ink-soft">管理者</p>
+      {f.admins.length === 0 ? (
+        <p className="text-[14px] text-alert">管理者がいません。下の「管理者を追加」から招待してください。</p>
+      ) : (
+        <ul className="space-y-1">
+          {f.admins.map((a) => (
+            <li key={a.uid} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+              <span className={cx("min-w-0 flex-1 truncate", a.disabled && "text-mute line-through")}>{a.email}</span>
+              <span className="text-[12px] text-mute">最後のログイン：{fmt(a.lastSignInAt)}</span>
+              {!a.disabled && (
+                <Button variant="quiet" className="min-h-8 px-3 text-[12px]" busy={busy === a.email} onClick={() => resend(a.email)}>
+                  パスワード設定メール
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding ? (
+        <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
+          <Input
+            type="email"
+            required
+            aria-label={`${f.name} に追加する管理者のメールアドレス`}
+            className="min-w-0 flex-1"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="管理者のメールアドレス"
+          />
+          <Button type="submit" busy={busy === "add"} className="min-h-11">
+            招待メールを送る
+          </Button>
+          <Button type="button" variant="quiet" className="min-h-11" onClick={() => setAdding(false)}>
+            やめる
+          </Button>
+        </form>
+      ) : (
+        <button type="button" className="mt-3 text-[14px] font-bold text-brand-strong hover:underline" onClick={() => setAdding(true)}>
+          ＋ 管理者を追加
+        </button>
+      )}
+    </li>
   );
 }

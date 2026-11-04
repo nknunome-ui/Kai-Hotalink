@@ -20,29 +20,42 @@ function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const operator = Boolean(me?.operator);
+  const outsideOperator = operator && !pathname.startsWith("/operator");
+
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
-  if (loading || !user) {
+  // 運営者は施設管理の画面だけを使う
+  useEffect(() => {
+    if (outsideOperator) router.replace("/operator");
+  }, [outsideOperator, router]);
+
+  if (loading || !user || outsideOperator) {
     return <p className="p-8 text-mute">読み込み中…</p>;
   }
 
-  const nav = [
-    { href: "/residents", label: "入居者" },
-    { href: "/settings", label: "受け入れ設定" },
-    ...(me?.role === "admin" ? [{ href: "/staff", label: "スタッフ管理" }] : []),
-    ...(me?.operator ? [{ href: "/operator", label: "施設の追加" }] : []),
-  ];
+  const nav = operator
+    ? [{ href: "/operator", label: "施設管理" }]
+    : [
+        { href: "/residents", label: "入居者" },
+        { href: "/settings", label: "受け入れ設定" },
+        ...(me?.role === "admin" ? [{ href: "/staff", label: "スタッフ管理" }] : []),
+      ];
 
   return (
     <div className="min-h-screen">
       <header className="border-b-4 border-brand-soft bg-sheet print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
-          <Link href="/residents" className="flex items-center gap-3">
+          <Link href={operator ? "/operator" : "/residents"} className="flex items-center gap-3">
             <Logo />
-            {me?.facilityName && (
-              <span className="rounded-full bg-brand-tint px-3 py-0.5 text-[13px] font-bold text-brand-strong">{me.facilityName}</span>
+            {operator ? (
+              <span className="rounded-full bg-ink-soft px-3 py-0.5 text-[13px] font-bold text-white">運営者</span>
+            ) : (
+              me?.facilityName && (
+                <span className="rounded-full bg-brand-tint px-3 py-0.5 text-[13px] font-bold text-brand-strong">{me.facilityName}</span>
+              )
             )}
           </Link>
           <nav className="flex flex-wrap gap-1" aria-label="メインメニュー">
@@ -69,7 +82,7 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 print:max-w-none print:p-0">
-        {error ? <Notice tone="alert">{error}</Notice> : me && !me.aiEnabled ? (
+        {error ? <Notice tone="alert">{error}</Notice> : me && !me.aiEnabled && !operator ? (
           <div className="mb-6 print:hidden">
             <Notice>AI が未設定のため、資料の読み取りはダミーで動いています。ANTHROPIC_API_KEY を設定すると Claude が資料を読み取ります。</Notice>
           </div>

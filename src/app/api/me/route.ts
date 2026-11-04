@@ -1,8 +1,20 @@
 import { aiEnabled } from "@/lib/server/claude";
-import { handle, isOperatorEmail, requireStaff } from "@/lib/server/http";
+import { handle, isOperatorEmail, requireStaff, verifyUser } from "@/lib/server/http";
 import { getSettings } from "@/lib/server/repo";
 
 export const GET = handle(async (req: Request) => {
+  // 運営者は施設管理の画面だけを使う（施設に所属していなくてもよい）
+  const user = await verifyUser(req);
+  if (isOperatorEmail(user.email)) {
+    return Response.json({
+      email: user.email,
+      role: "admin",
+      facilityId: "",
+      facilityName: "",
+      aiEnabled: aiEnabled(),
+      operator: true,
+    });
+  }
   const staff = await requireStaff(req);
   const { settings } = await getSettings(staff.facilityId);
   return Response.json({
@@ -11,6 +23,6 @@ export const GET = handle(async (req: Request) => {
     facilityId: staff.facilityId,
     facilityName: settings.facilityName,
     aiEnabled: aiEnabled(),
-    operator: isOperatorEmail(staff.email),
+    operator: false,
   });
 });

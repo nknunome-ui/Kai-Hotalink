@@ -56,19 +56,24 @@ export function isOperatorEmail(email: string | null | undefined): boolean {
   return list.includes(email.toLowerCase());
 }
 
-/** 運営者だけが使える API 用。施設に所属していなくてもよい */
-export async function requireOperator(req: Request): Promise<{ uid: string; email: string }> {
+/** ログインしているかだけを確かめる（施設に所属していなくてもよい） */
+export async function verifyUser(req: Request): Promise<{ uid: string; email: string | null }> {
   const header = req.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) throw new HttpError(401, "ログインが必要です");
-  let decoded;
   try {
-    decoded = await adminAuth().verifyIdToken(token, true);
+    const decoded = await adminAuth().verifyIdToken(token, true);
+    return { uid: decoded.uid, email: decoded.email ?? null };
   } catch {
     throw new HttpError(401, "ログインの有効期限が切れました。もう一度ログインしてください");
   }
-  if (!isOperatorEmail(decoded.email)) throw new HttpError(403, "この操作は運営者のみ行えます");
-  return { uid: decoded.uid, email: decoded.email! };
+}
+
+/** 運営者だけが使える API 用。施設に所属していなくてもよい */
+export async function requireOperator(req: Request): Promise<{ uid: string; email: string }> {
+  const user = await verifyUser(req);
+  if (!isOperatorEmail(user.email)) throw new HttpError(403, "この操作は運営者のみ行えます");
+  return { uid: user.uid, email: user.email! };
 }
 
 export function requireAdmin(staff: Staff) {
