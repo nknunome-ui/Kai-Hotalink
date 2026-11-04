@@ -1,4 +1,4 @@
-# Hotalink
+# HotaLink
 
 有料老人ホーム向けの入居判定支援 Web アプリ（MVP）。
 
