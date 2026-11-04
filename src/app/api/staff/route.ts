@@ -1,4 +1,4 @@
-import { inviteStaff, listStaff, normalizeEmail, normalizeRole, passwordSetupLink } from "@/lib/server/accounts";
+import { inviteStaff, listStaff, normalizeEmail, normalizeRole } from "@/lib/server/accounts";
 import { handle, readJson, requireAdmin, requireStaff } from "@/lib/server/http";
 
 // 施設のスタッフの一覧と招待（施設の管理者だけ）
@@ -15,6 +15,5 @@ export const POST = handle(async (req: Request) => {
   const email = normalizeEmail(body.email);
   const role = normalizeRole(body.role ?? "staff");
   const result = await inviteStaff(staff.facilityId, email, role);
-  const link = await passwordSetupLink(email, new URL(req.url).origin);
-  return Response.json({ ...result, email, link });
+  return Response.json({ ...result, email });
 });
