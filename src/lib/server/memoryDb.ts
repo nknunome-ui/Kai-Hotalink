@@ -41,6 +41,11 @@ export class MemoryDb {
     return result;
   }
 
+  /** ドキュメントと、その下のサブコレクションをまとめて消す（Firestore の recursiveDelete と同じ） */
+  async recursiveDelete(ref: MemDoc) {
+    for (const k of [...this.store.keys()]) if (k === ref.path || k.startsWith(`${ref.path}/`)) this.store.delete(k);
+  }
+
   batch() {
     const ops: (() => void)[] = [];
     return {
