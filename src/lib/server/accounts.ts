@@ -168,17 +168,13 @@ export async function addFacilityAdmin(fid: string, email: string) {
 /**
  * パスワード設定用のリンクを作る（メールが届かないとき、LINE などで本人に送ってもらう）。
  * 新しいリンクを作ると、それより前のリンク（メールで送ったものも）は使えなくなる。
- * 設定が終わったらこのアプリのログイン画面に戻す。戻り先のドメインが Firebase の
- * 承認済みドメインに無いときは、戻り先なしのリンクにする。
+ * Firebase のページではなく、このアプリのパスワード設定ページ（/auth/action）を開くリンクにする。
  */
 export async function passwordSetupLink(email: string, origin: string): Promise<string> {
-  try {
-    return await adminAuth().generatePasswordResetLink(email, { url: `${origin}/login` });
-  } catch (e) {
-    const code = (e as { code?: string }).code ?? "";
-    if (!code.includes("continue-uri") && !code.includes("unauthorized-domain")) throw e;
-    return adminAuth().generatePasswordResetLink(email);
-  }
+  const firebaseLink = await adminAuth().generatePasswordResetLink(email);
+  const code = new URL(firebaseLink).searchParams.get("oobCode");
+  if (!code) throw new HttpError(500, "パスワード設定用のリンクを作れませんでした");
+  return `${origin}/auth/action?mode=resetPassword&oobCode=${encodeURIComponent(code)}`;
 }
 
 /** 施設の管理者・スタッフ本人のリンクだけを作れるようにする */

@@ -52,8 +52,8 @@ vi.mock("@/lib/server/firebaseAdmin", () => {
       },
       updateUser: async (uid: string, patch: Partial<FakeUser>) => Object.assign(state.users.get(uid)!, patch),
       revokeRefreshTokens: async (uid: string) => void state.revoked.push(uid),
-      generatePasswordResetLink: async (email: string, settings?: { url: string }) =>
-        `https://example.firebaseapp.com/__/auth/action?mode=resetPassword&email=${email}&continue=${settings?.url ?? ""}`,
+      generatePasswordResetLink: async (email: string) =>
+        `https://example.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode=code-for-${email}&apiKey=x`,
     }),
   };
 });
@@ -162,7 +162,8 @@ describe("施設の追加（運営者）", () => {
   it("パスワード設定用のリンクは、自分の施設のスタッフ（運営者は指定した施設の管理者）のぶんだけ作れる", async () => {
     const mine = await json(await staffLink.POST(req("adminA", {}), params({ uid: "staffA" })));
     expect(mine.body).toMatchObject({ email: "staff@a.jp" });
-    expect(mine.body.link).toContain("email=staff@a.jp&continue=http://localhost/login");
+    // Firebase のページではなく、このアプリのパスワード設定ページを開くリンクにする
+    expect(mine.body.link).toBe("http://localhost/auth/action?mode=resetPassword&oobCode=code-for-staff%40a.jp");
     expect((await staffLink.POST(req("adminA", {}), params({ uid: "staffB" }))).status).toBe(404);
     expect((await staffLink.POST(req("staffA", {}), params({ uid: "staffA" }))).status).toBe(403);
 
