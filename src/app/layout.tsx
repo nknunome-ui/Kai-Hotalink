@@ -11,7 +11,7 @@ const maru = Zen_Maru_Gothic({
 });
 
 export const metadata: Metadata = {
-  title: "Hotalink",
+  title: "HotaLink",
   description: "有料老人ホームの入居判定を支援するツール",
   robots: { index: false, follow: false },
 };

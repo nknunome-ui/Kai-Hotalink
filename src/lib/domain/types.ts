@@ -1,4 +1,4 @@
-// Hotalink のドメイン型。サーバー・クライアント両方から使う純粋な型定義。
+// HotaLink のドメイン型。サーバー・クライアント両方から使う純粋な型定義。
 import {
   emptyNeeds,
   MEDICAL_IDS,
