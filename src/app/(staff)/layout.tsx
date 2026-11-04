@@ -31,6 +31,8 @@ function Shell({ children }: { children: ReactNode }) {
   const nav = [
     { href: "/residents", label: "入居者" },
     { href: "/settings", label: "受け入れ設定" },
+    ...(me?.role === "admin" ? [{ href: "/staff", label: "スタッフ管理" }] : []),
+    ...(me?.operator ? [{ href: "/operator", label: "施設の追加" }] : []),
   ];
 
   return (
@@ -43,7 +45,7 @@ function Shell({ children }: { children: ReactNode }) {
               <span className="rounded-full bg-brand-tint px-3 py-0.5 text-[13px] font-bold text-brand-strong">{me.facilityName}</span>
             )}
           </Link>
-          <nav className="flex gap-1" aria-label="メインメニュー">
+          <nav className="flex flex-wrap gap-1" aria-label="メインメニュー">
             {nav.map((n) => (
               <Link
                 key={n.href}

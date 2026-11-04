@@ -46,6 +46,31 @@ export async function requireStaff(req: Request): Promise<Staff> {
   };
 }
 
+/** 運営者（施設を追加できる人）か。Vercel の環境変数 OPERATOR_EMAILS（カンマ区切り）で決める */
+export function isOperatorEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const list = (process.env.OPERATOR_EMAILS ?? "")
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+  return list.includes(email.toLowerCase());
+}
+
+/** 運営者だけが使える API 用。施設に所属していなくてもよい */
+export async function requireOperator(req: Request): Promise<{ uid: string; email: string }> {
+  const header = req.headers.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) throw new HttpError(401, "ログインが必要です");
+  let decoded;
+  try {
+    decoded = await adminAuth().verifyIdToken(token, true);
+  } catch {
+    throw new HttpError(401, "ログインの有効期限が切れました。もう一度ログインしてください");
+  }
+  if (!isOperatorEmail(decoded.email)) throw new HttpError(403, "この操作は運営者のみ行えます");
+  return { uid: decoded.uid, email: decoded.email! };
+}
+
 export function requireAdmin(staff: Staff) {
   if (staff.role !== "admin") throw new HttpError(403, "この操作は施設の管理者のみ行えます");
 }

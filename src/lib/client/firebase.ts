@@ -1,6 +1,6 @@
 "use client";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
+import { connectAuthEmulator, getAuth, sendPasswordResetEmail, type Auth } from "firebase/auth";
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 
 const config = {
@@ -60,4 +60,14 @@ export function storageErrorMessage(e: unknown, fileName: string): string {
   if (code === "storage/quota-exceeded") return `${fileName}：Storage の容量・利用枠を超えています。`;
   if (code === "storage/canceled") return `${fileName}：アップロードが中断されました。`;
   return e instanceof Error ? `${fileName}：${e.message}` : `${fileName}：アップロードできませんでした`;
+}
+
+/**
+ * パスワード設定（再設定）のメールを送る。招待したスタッフの最初のパスワード設定にも使う。
+ * 設定が終わったらこのアプリのログイン画面に戻す。
+ */
+export async function sendPasswordSetupEmail(email: string): Promise<void> {
+  const auth = clientAuth();
+  auth.languageCode = "ja";
+  await sendPasswordResetEmail(auth, email, { url: `${window.location.origin}/login` });
 }
