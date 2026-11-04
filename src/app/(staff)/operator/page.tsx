@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
+import { SetupLink } from "@/components/SetupLink";
 import { sendPasswordSetupEmail } from "@/lib/client/firebase";
 
 interface FacilitySummary {
@@ -12,21 +13,22 @@ interface FacilitySummary {
   admins: { uid: string; email: string; disabled: boolean; lastSignInAt: string | null }[];
 }
 
-type Msg = { tone: "info" | "alert"; text: string };
+type Msg = { tone: "info" | "alert"; text: string; link?: { email: string; link: string } };
 
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("ja-JP", { year: "numeric", month: "numeric", day: "numeric" }) : "—";
 
-/** メールを送り、送れなかったときは「パスワードを忘れた方」からの設定を案内する */
-async function sendSetup(email: string, done: string): Promise<Msg> {
+/** メールを送り、届かないとき用にパスワード設定用のリンクも出す */
+async function sendSetup(email: string, done: string, link: string): Promise<Msg> {
   try {
     await sendPasswordSetupEmail(email);
-    return { tone: "info", text: `${done}${email} にパスワード設定のメールを送りました。` };
-  } catch {
     return {
-      tone: "alert",
-      text: `${done}${email} へのメールを送れませんでした。ログイン画面の「パスワードを忘れた方」から設定してもらってください。`,
+      tone: "info",
+      text: `${done}${email} にパスワード設定のメールを送りました。届かないときは、下のリンクを本人に送ってください。`,
+      link: { email, link },
     };
+  } catch {
+    return { tone: "alert", text: `${done}${email} へのメールを送れませんでした。下のリンクを本人に送ってください。`, link: { email, link } };
   }
 }
 
@@ -62,8 +64,9 @@ export default function OperatorPage() {
       <AddFacilityForm onDone={report} />
 
       {msg && (
-        <div className="mt-5">
+        <div className="mt-5 space-y-3">
           <Notice tone={msg.tone}>{msg.text}</Notice>
+          {msg.link && <SetupLink email={msg.link.email} link={msg.link.link} onClose={() => setMsg(null)} />}
         </div>
       )}
 
@@ -97,11 +100,11 @@ function AddFacilityForm({ onDone }: { onDone: (m: Msg) => void }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ adminEmail: string }>("/api/operator/facilities", {
+      const r = await api<{ adminEmail: string; link: string }>("/api/operator/facilities", {
         method: "POST",
         body: JSON.stringify({ name, adminEmail }),
       });
-      onDone(await sendSetup(r.adminEmail, `「${name}」を追加しました。`));
+      onDone(await sendSetup(r.adminEmail, `「${name}」を追加しました。`, r.link));
       setName("");
       setAdminEmail("");
     } catch (e) {
@@ -138,11 +141,11 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
     e.preventDefault();
     setBusy("add");
     try {
-      const r = await api<{ email: string }>(`/api/operator/facilities/${f.id}/admins`, {
+      const r = await api<{ email: string; link: string }>(`/api/operator/facilities/${f.id}/admins`, {
         method: "POST",
         body: JSON.stringify({ email }),
       });
-      onDone(await sendSetup(r.email, `「${f.name}」の管理者に追加しました。`));
+      onDone(await sendSetup(r.email, `「${f.name}」の管理者に追加しました。`, r.link));
       setEmail("");
       setAdding(false);
     } catch (e) {
@@ -152,10 +155,16 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
     }
   }
 
-  async function resend(adminEmail: string) {
-    setBusy(adminEmail);
-    onDone(await sendSetup(adminEmail, ""));
-    setBusy(null);
+  async function resend(admin: FacilitySummary["admins"][number]) {
+    setBusy(admin.email);
+    try {
+      const r = await api<{ link: string }>(`/api/operator/facilities/${f.id}/admins/${admin.uid}/setup-link`, { method: "POST" });
+      onDone(await sendSetup(admin.email, "", r.link));
+    } catch (e) {
+      onDone({ tone: "alert", text: e instanceof Error ? e.message : "リンクを作れませんでした" });
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -176,8 +185,8 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
               <span className={cx("min-w-0 flex-1 truncate", a.disabled && "text-mute line-through")}>{a.email}</span>
               <span className="text-[12px] text-mute">最後のログイン：{fmt(a.lastSignInAt)}</span>
               {!a.disabled && (
-                <Button variant="quiet" className="min-h-8 px-3 text-[12px]" busy={busy === a.email} onClick={() => resend(a.email)}>
-                  パスワード設定メール
+                <Button variant="quiet" className="min-h-8 px-3 text-[12px]" busy={busy === a.email} onClick={() => resend(a)}>
+                  パスワード設定メール・リンク
                 </Button>
               )}
             </li>
