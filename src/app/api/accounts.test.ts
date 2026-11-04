@@ -77,6 +77,9 @@ const staffLink = await import("./staff/[uid]/setup-link/route");
 const facilityOne = await import("./operator/facilities/[id]/route");
 const adminLink = await import("./operator/facilities/[id]/admins/[uid]/setup-link/route");
 const me = await import("./me/route");
+const staffInvite = await import("./staff/[uid]/invite/route");
+const adminInvite = await import("./operator/facilities/[id]/admins/[uid]/invite/route");
+const passwordReset = await import("./auth/password-reset/route");
 
 const req = (token: string | null, body?: unknown, method = body ? "POST" : "GET") =>
   new Request("http://localhost/api", {
@@ -99,6 +102,8 @@ beforeEach(() => {
   user("staffA", "staff@a.jp", { facilityId: "fa", role: "staff" });
   user("staffB", "staff@b.jp", { facilityId: "fb", role: "staff" });
   process.env.OPERATOR_EMAILS = " Op@Example.jp , other@example.jp";
+  delete process.env.RESEND_API_KEY;
+  vi.unstubAllGlobals();
   // 運営者は施設に所属していなくてもよい
   user("op", "op@example.jp");
 });
@@ -211,5 +216,68 @@ describe("施設の追加（運営者）", () => {
     expect(state.users.get("op2")!.customClaims).toEqual({});
     expect(state.mem.store.has("facilities/fb")).toBe(true);
     expect((await del("ひだまりの家")).status).toBe(404);
+  });
+});
+
+describe("メールの送信（Resend）", () => {
+  type Sent = { from: string; to: string[]; subject: string; html: string; text: string };
+  let sent: Sent[];
+  let fail: boolean;
+  beforeEach(() => {
+    sent = [];
+    fail = false;
+    process.env.RESEND_API_KEY = "re_test";
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      expect(url).toBe("https://api.resend.com/emails");
+      if (fail) return new Response("bad", { status: 500 });
+      sent.push(JSON.parse(String(init.body)));
+      return Response.json({ id: "m1" });
+    });
+  });
+
+  it("RESEND_API_KEY が無ければ送らず、画面側で Firebase のメールを送る（mailed: client）", async () => {
+    delete process.env.RESEND_API_KEY;
+    const r = await json(await staffRoute.POST(req("adminA", { email: "new@a.jp", role: "staff" })));
+    expect(r.body.mailed).toBe("client");
+    expect((await json(await passwordReset.POST(req(null, { email: "staff@a.jp" })))).body.mailed).toBe("client");
+    expect(sent).toEqual([]);
+  });
+
+  it("招待: HotaLink から、施設名入りの招待メールを送る。リンクはこのアプリのパスワード設定ページ", async () => {
+    state.mem.collection("facilities").doc("fa").setSync({ settings: { facilityName: "ひだまりの家" } });
+    const r = await json(await staffRoute.POST(req("adminA", { email: "new@a.jp", role: "staff" })));
+    expect(r.body.mailed).toBe("server");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ from: "HotaLink <noreply@hotalink.jp>", to: ["new@a.jp"] });
+    expect(sent[0].subject).toContain("ひだまりの家");
+    expect(sent[0].text).toContain("http://localhost/auth/action?mode=resetPassword&oobCode=code-for-new%40a.jp");
+
+    const op = await json(await facilities.POST(req("op", { name: "さくらの家", adminEmail: "boss@sakura.jp" })));
+    expect(op.body.mailed).toBe("server");
+    expect(sent[1].subject).toContain("さくらの家");
+  });
+
+  it("招待メールの再送は、自分の施設のスタッフ（運営者は指定した施設の人）だけ", async () => {
+    expect((await json(await staffInvite.POST(req("adminA", {}), params({ uid: "staffA" })))).body).toEqual({ email: "staff@a.jp", mailed: "server" });
+    expect((await staffInvite.POST(req("adminA", {}), params({ uid: "staffB" }))).status).toBe(404);
+    expect((await staffInvite.POST(req("staffA", {}), params({ uid: "staffA" }))).status).toBe(403);
+    expect((await adminInvite.POST(req("op", {}), params({ id: "fa", uid: "adminA" }))).status).toBe(200);
+    expect((await adminInvite.POST(req("op", {}), params({ id: "fb", uid: "adminA" }))).status).toBe(404);
+    expect((await adminInvite.POST(req("adminA", {}), params({ id: "fa", uid: "adminA" }))).status).toBe(403);
+    expect(sent.map((m) => m.to[0])).toEqual(["staff@a.jp", "admin@a.jp"]);
+
+    fail = true;
+    expect((await staffInvite.POST(req("adminA", {}), params({ uid: "staffA" }))).status).toBe(502);
+  });
+
+  it("パスワードを忘れたとき: アカウントが無くても同じ返事。同じ人へは1分に1回まで", async () => {
+    const ask = async (email: string) => json(await passwordReset.POST(req(null, { email })));
+    expect(await ask("Staff@A.jp")).toEqual({ status: 200, body: { mailed: "server" } });
+    expect(await ask("nobody@a.jp")).toEqual({ status: 200, body: { mailed: "server" } });
+    expect(await ask("staff@a.jp")).toEqual({ status: 200, body: { mailed: "server" } });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toEqual(["staff@a.jp"]);
+    expect(sent[0].subject).toContain("パスワードの再設定");
+    expect((await ask("not-an-email")).status).toBe(400);
   });
 });

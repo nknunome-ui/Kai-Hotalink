@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, Segmented, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { SetupLink } from "@/components/SetupLink";
-import { sendPasswordSetupEmail } from "@/lib/client/firebase";
+import { finishMail } from "@/lib/client/firebase";
 
 interface StaffAccount {
   uid: string;
@@ -55,8 +55,9 @@ export default function StaffPage() {
     run(`mail-${s.uid}`, async () => {
       setLinkFor({ uid: s.uid, email: s.email });
       try {
-        await sendPasswordSetupEmail(s.email);
-        return `${s.email} に、パスワード設定のメールを送りました。`;
+        const r = await api<{ mailed: "server" | "client" }>(`/api/staff/${s.uid}/invite`, { method: "POST" });
+        await finishMail(r.mailed, s.email);
+        return `${s.email} に、招待メールを送り直しました。`;
       } catch {
         return `${s.email} へのメールを送れませんでした。下の「リンクを作る」から、リンクを本人に送ってください。`;
       }
@@ -143,7 +144,7 @@ export default function StaffPage() {
                     <div className="flex gap-1">
                       {!s.disabled && (
                         <Button variant="quiet" className="min-h-9 px-3 text-[13px]" busy={busy === `mail-${s.uid}`} onClick={() => resend(s)}>
-                          パスワード設定メールを再送
+                          招待メールを再送
                         </Button>
                       )}
                       <Button
@@ -181,21 +182,21 @@ function InviteForm({ onInvited }: { onInvited: (text: string, who: { uid: strin
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ uid: string; email: string; created: boolean }>("/api/staff", {
+      const r = await api<{ uid: string; email: string; created: boolean; mailed: "server" | "client" }>("/api/staff", {
         method: "POST",
         body: JSON.stringify({ email, role }),
       });
       setEmail("");
       try {
-        await sendPasswordSetupEmail(r.email);
+        await finishMail(r.mailed, r.email);
       } catch {
         onInvited(`${r.email} を招待しましたが、メールを送れませんでした。下の「リンクを作る」から、リンクを本人に送ってください。`, r);
         return;
       }
       onInvited(
         r.created
-          ? `${r.email} を招待しました。パスワード設定のメールが届くので、設定してからログインしてもらってください。`
-          : `${r.email} はすでにアカウントがあったので、この施設に「${ROLE_LABELS[role]}」として追加し、パスワード設定のメールを送りました。`,
+          ? `${r.email} を招待しました。招待メールが届くので、パスワードを決めてログインしてもらってください。`
+          : `${r.email} はすでにアカウントがあったので、この施設に「${ROLE_LABELS[role]}」として追加し、招待メールを送りました。`,
         r,
       );
     } catch (e) {

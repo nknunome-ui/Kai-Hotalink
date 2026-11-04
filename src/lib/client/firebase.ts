@@ -80,3 +80,11 @@ export async function sendPasswordSetupEmail(email: string): Promise<void> {
     await sendPasswordResetEmail(auth, email);
   }
 }
+
+/**
+ * サーバーがメールを送らなかったとき（RESEND_API_KEY が未設定のとき、mailed が "client"）は、
+ * Firebase のパスワード再設定メールで代わりに送る。
+ */
+export async function finishMail(mailed: "server" | "client", email: string): Promise<void> {
+  if (mailed === "client") await sendPasswordSetupEmail(email);
+}
