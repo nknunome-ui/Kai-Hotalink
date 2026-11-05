@@ -70,10 +70,10 @@ npm run dev                   # http://localhost:3000
 2. **Environment Variables** に `.env.example` の項目をすべて登録（`FIREBASE_PRIVATE_KEY` は改行を `\n` にした1行で）
 3. デプロイ後、`NEXT_PUBLIC_APP_URL` に本番の URL を入れて再デプロイ
 4. Firebase コンソール → Authentication → 設定 → **承認済みドメイン**に Vercel のドメインを追加
-5. Firebase コンソール → Authentication → **テンプレート** → 「パスワードの再設定」（招待メールにもこのメールを使う）
-   - 言語を日本語にする
-   - 鉛筆アイコン → **アクション URL をカスタマイズ** → `https://<本番のドメイン>/auth/action`（メールのリンクから、このアプリのパスワード設定ページが開く）
-   - 迷惑メールに入りにくくするため、**ドメインをカスタマイズ**で送信元を本番のドメイン（例：`noreply@hotalink.jp`）にし、表示される DNS レコードをドメインに登録する。送信者名は「HotaLink」にする
+5. メール（招待・パスワードの再設定）は HotaLink から送る（[Resend](https://resend.com) を使う）
+   - Resend に登録 → **Domains** → `hotalink.jp`（本番のドメイン）を追加し、表示される DNS レコード（TXT・MX など）をドメインの DNS に登録して **Verify**
+   - **API Keys** でキーを作り、Vercel の環境変数 `RESEND_API_KEY` に登録して再デプロイ。送信元は `noreply@hotalink.jp`（変えるときは `MAIL_FROM`）
+   - `RESEND_API_KEY` が無いときは、Firebase の「パスワードの再設定」メールで代わりに送る（その場合は Authentication → テンプレートで言語を日本語に、アクション URL を `https://<本番のドメイン>/auth/action` にする）
 
 ### 4. アカウントの作り方
 

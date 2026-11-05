@@ -1,8 +1,9 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { defaultSettings } from "@/lib/domain/presets";
 import { adminAuth, bucket, db } from "./firebaseAdmin";
 import { isOperatorEmail } from "./http";
+import { inviteMail, mailEnabled, resetMail, sendMail } from "./mail";
 import { HttpError } from "./http";
 
 // アカウント（Firebase Authentication のユーザー）と施設の管理。
@@ -235,4 +236,49 @@ export async function deleteFacility(fid: string, confirmName: string) {
     deletedAccounts = toDelete.length;
   }
   return { name, residents: residents.docs.length, deletedAccounts };
+}
+
+// ---------- メールの送信 ----------
+
+/** どこからメールを送ったか。client なら、画面側で Firebase のメールを送る（RESEND_API_KEY が未設定のとき） */
+export type Mailed = "server" | "client";
+
+/** 施設名（招待メールの文面に使う） */
+async function facilityNameOf(fid: string): Promise<string> {
+  const snap = await db().collection("facilities").doc(fid).get();
+  return (snap.data() as { settings?: { facilityName?: string } } | undefined)?.settings?.facilityName ?? "";
+}
+
+/** 招待メールを送る（施設の追加・管理者の追加・スタッフの招待・再送） */
+export async function deliverInvite(fid: string, email: string, role: Role, origin: string): Promise<Mailed> {
+  if (!mailEnabled()) return "client";
+  const link = await passwordSetupLink(email, origin);
+  await sendMail(inviteMail(email, await facilityNameOf(fid), role, link));
+  return "server";
+}
+
+/** 施設のスタッフ本人に、招待メールを送り直す */
+export async function resendInvite(fid: string, uid: string, origin: string): Promise<{ email: string; mailed: Mailed }> {
+  const u = await adminAuth().getUser(uid).catch(() => null);
+  if (!u || u.customClaims?.facilityId !== fid || !u.email) throw new HttpError(404, "スタッフが見つかりません");
+  const role: Role = u.customClaims?.role === "admin" ? "admin" : "staff";
+  return { email: u.email, mailed: await deliverInvite(fid, u.email, role, origin) };
+}
+
+const THROTTLE_MS = 60_000;
+
+/**
+ * 「パスワードを忘れた方」のメールを送る。アカウントがあるかどうかは呼び出し元に伝えない。
+ * 同じメールアドレスへは1分に1回まで（いたずらで大量に送られないように）。
+ */
+export async function deliverReset(email: string, origin: string): Promise<Mailed> {
+  if (!mailEnabled()) return "client";
+  const u = await adminAuth().getUserByEmail(email).catch(() => null);
+  if (!u || u.disabled) return "server";
+  const ref = db().collection("mailThrottle").doc(createHash("sha256").update(email).digest("hex"));
+  const last = (await ref.get()).data() as { at?: string } | undefined;
+  if (last?.at && Date.now() - Date.parse(last.at) < THROTTLE_MS) return "server";
+  await ref.set({ at: new Date().toISOString() });
+  await sendMail(resetMail(email, await passwordSetupLink(email, origin)));
+  return "server";
 }

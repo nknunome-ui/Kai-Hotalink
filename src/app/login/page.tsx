@@ -86,7 +86,15 @@ function ForgotPassword({ initialEmail }: { initialEmail: string }) {
     setBusy(true);
     setMsg(null);
     try {
-      await sendPasswordSetupEmail(email.trim());
+      // サーバーから HotaLink のメールを送る（未設定なら Firebase のメールで送る）
+      const res = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(body.error ?? ""), { code: res.status === 400 ? "auth/invalid-email" : "" });
+      if (body.mailed === "client") await sendPasswordSetupEmail(email.trim());
       // アカウントがあるかどうかは伝えない（他人のメールアドレスの登録有無を調べられないように）
       setMsg({
         tone: "info",

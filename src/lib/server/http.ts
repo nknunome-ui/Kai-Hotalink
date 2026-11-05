@@ -46,6 +46,12 @@ export async function requireStaff(req: Request): Promise<Staff> {
   };
 }
 
+/** メールやアンケートのリンクに使う、このアプリの URL（NEXT_PUBLIC_APP_URL。サンプル値のままならアクセス中の URL） */
+export function appOrigin(req: Request): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  return configured && !configured.includes("your-app.") ? configured : new URL(req.url).origin;
+}
+
 /** 運営者（施設を追加できる人）か。Vercel の環境変数 OPERATOR_EMAILS（カンマ区切り）で決める */
 export function isOperatorEmail(email: string | null | undefined): boolean {
   if (!email) return false;

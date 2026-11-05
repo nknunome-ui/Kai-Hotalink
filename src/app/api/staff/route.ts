@@ -1,5 +1,5 @@
-import { inviteStaff, listStaff, normalizeEmail, normalizeRole } from "@/lib/server/accounts";
-import { handle, readJson, requireAdmin, requireStaff } from "@/lib/server/http";
+import { deliverInvite, inviteStaff, listStaff, normalizeEmail, normalizeRole } from "@/lib/server/accounts";
+import { appOrigin, handle, readJson, requireAdmin, requireStaff } from "@/lib/server/http";
 
 // 施設のスタッフの一覧と招待（施設の管理者だけ）
 export const GET = handle(async (req: Request) => {
@@ -15,5 +15,6 @@ export const POST = handle(async (req: Request) => {
   const email = normalizeEmail(body.email);
   const role = normalizeRole(body.role ?? "staff");
   const result = await inviteStaff(staff.facilityId, email, role);
-  return Response.json({ ...result, email });
+  const mailed = await deliverInvite(staff.facilityId, email, role, appOrigin(req));
+  return Response.json({ ...result, email, mailed });
 });

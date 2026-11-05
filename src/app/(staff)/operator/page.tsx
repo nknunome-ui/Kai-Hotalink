@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
 import { SetupLink } from "@/components/SetupLink";
-import { sendPasswordSetupEmail } from "@/lib/client/firebase";
+import { finishMail } from "@/lib/client/firebase";
 
 interface FacilitySummary {
   id: string;
@@ -20,10 +20,10 @@ const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("ja-JP", { year: "numeric", month: "numeric", day: "numeric" }) : "—";
 
 /** メールを送り、届かないとき用に「リンクを作る」を出す（リンクは押したときだけ作る） */
-async function sendSetup(done: string, target: NonNullable<Msg["target"]>): Promise<Msg> {
+async function sendSetup(done: string, target: NonNullable<Msg["target"]>, mailed: "server" | "client"): Promise<Msg> {
   try {
-    await sendPasswordSetupEmail(target.email);
-    return { tone: "info", text: `${done}${target.email} にパスワード設定のメールを送りました。`, target };
+    await finishMail(mailed, target.email);
+    return { tone: "info", text: `${done}${target.email} に招待メールを送りました。`, target };
   } catch {
     return {
       tone: "alert",
@@ -114,11 +114,11 @@ function AddFacilityForm({ onDone }: { onDone: (m: Msg) => void }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ facilityId: string; adminUid: string; adminEmail: string }>("/api/operator/facilities", {
+      const r = await api<{ facilityId: string; adminUid: string; adminEmail: string; mailed: "server" | "client" }>("/api/operator/facilities", {
         method: "POST",
         body: JSON.stringify({ name, adminEmail }),
       });
-      onDone(await sendSetup(`「${name}」を追加しました。`, { facilityId: r.facilityId, uid: r.adminUid, email: r.adminEmail }));
+      onDone(await sendSetup(`「${name}」を追加しました。`, { facilityId: r.facilityId, uid: r.adminUid, email: r.adminEmail }, r.mailed));
       setName("");
       setAdminEmail("");
     } catch (e) {
@@ -155,11 +155,11 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
     e.preventDefault();
     setBusy("add");
     try {
-      const r = await api<{ uid: string; email: string }>(`/api/operator/facilities/${f.id}/admins`, {
+      const r = await api<{ uid: string; email: string; mailed: "server" | "client" }>(`/api/operator/facilities/${f.id}/admins`, {
         method: "POST",
         body: JSON.stringify({ email }),
       });
-      onDone(await sendSetup(`「${f.name}」の管理者に追加しました。`, { facilityId: f.id, uid: r.uid, email: r.email }));
+      onDone(await sendSetup(`「${f.name}」の管理者に追加しました。`, { facilityId: f.id, uid: r.uid, email: r.email }, r.mailed));
       setEmail("");
       setAdding(false);
     } catch (e) {
@@ -171,7 +171,13 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
 
   async function resend(admin: FacilitySummary["admins"][number]) {
     setBusy(admin.email);
-    onDone(await sendSetup("", { facilityId: f.id, uid: admin.uid, email: admin.email }));
+    const target = { facilityId: f.id, uid: admin.uid, email: admin.email };
+    try {
+      const r = await api<{ mailed: "server" | "client" }>(`/api/operator/facilities/${f.id}/admins/${admin.uid}/invite`, { method: "POST" });
+      onDone(await sendSetup("", target, r.mailed));
+    } catch (e) {
+      onDone({ tone: "alert", text: e instanceof Error ? e.message : "メールを送れませんでした", target });
+    }
     setBusy(null);
   }
 
@@ -194,7 +200,7 @@ function FacilityRow({ f, onDone }: { f: FacilitySummary; onDone: (m: Msg) => vo
               <span className="text-[12px] text-mute">最後のログイン：{fmt(a.lastSignInAt)}</span>
               {!a.disabled && (
                 <Button variant="quiet" className="min-h-8 px-3 text-[12px]" busy={busy === a.email} onClick={() => resend(a)}>
-                  パスワード設定メールを再送
+                  招待メールを再送
                 </Button>
               )}
             </li>
