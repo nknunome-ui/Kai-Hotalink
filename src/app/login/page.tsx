@@ -3,7 +3,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { clientAuth, sendPasswordSetupEmail } from "@/lib/client/firebase";
-import { Button, Field, Input, Logo, Notice } from "@/components/ui";
+import { Button, Field, Input, Logo, Notice, PasswordInput } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,8 +54,7 @@ export default function LoginPage() {
             <Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
           <Field label="パスワード">
-            <Input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               required
               value={password}
