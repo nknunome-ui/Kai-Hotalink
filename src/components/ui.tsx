@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { useState } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -60,6 +61,30 @@ const inputCls =
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputCls, "min-h-11", props.className)} />;
+}
+
+/** パスワードの入力欄。右のボタンで、入れた文字を見られる */
+export function PasswordInput({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [shown, setShown] = useState(false);
+  return (
+    <span className={cx("relative block", className)}>
+      <input {...props} type={shown ? "text" : "password"} className={cx(inputCls, "min-h-11 pr-20")} />
+      <button
+        type="button"
+        aria-pressed={shown}
+        aria-label={shown ? "パスワードを隠す" : "パスワードを表示する"}
+        onClick={() => setShown((v) => !v)}
+        className="absolute inset-y-1 right-1 flex items-center gap-1 rounded-xl px-2.5 text-[13px] font-bold text-ink-soft hover:bg-brand-tint hover:text-brand-strong"
+      >
+        <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="3" />
+          {shown && <path d="M3 3l18 18" />}
+        </svg>
+        {shown ? "隠す" : "表示"}
+      </button>
+    </span>
+  );
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

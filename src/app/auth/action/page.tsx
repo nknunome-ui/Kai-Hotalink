@@ -2,7 +2,7 @@
 import { confirmPasswordReset, signInWithEmailAndPassword, verifyPasswordResetCode } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
-import { Button, Field, Input, Logo, Notice } from "@/components/ui";
+import { Button, Field, Logo, Notice, PasswordInput } from "@/components/ui";
 import { clientAuth } from "@/lib/client/firebase";
 
 // パスワード設定（招待・パスワードを忘れたとき）のページ。
@@ -101,10 +101,10 @@ function ResetPassword() {
         </p>
       </div>
       <Field label="新しいパスワード" hint="8文字以上">
-        <Input type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordInput autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
       <Field label="確認のため、もう一度">
-        <Input type="password" autoComplete="new-password" required value={again} onChange={(e) => setAgain(e.target.value)} />
+        <PasswordInput autoComplete="new-password" required value={again} onChange={(e) => setAgain(e.target.value)} />
       </Field>
       {/* パスワード管理ソフトが、どのアカウントのパスワードか分かるように */}
       <input type="email" autoComplete="username" value={state.email} readOnly hidden />
