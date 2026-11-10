@@ -65,6 +65,8 @@ export function defaultSettings(facilityName = ""): FacilitySettings {
   const p = PRESETS.standard;
   return {
     facilityName,
+    contactDesk: "入居相談窓口",
+    contactPhone: "",
     acceptance: defaultAcceptance(),
     preset: "standard",
     weights: { ...p.weights },
@@ -88,6 +90,7 @@ export function validateSettings(s: FacilitySettings): string | null {
   if (!["standard", "medical", "dementia"].includes(s.preset)) return "プリセットが正しくありません";
   if (!["low", "normal", "high"].includes(s.gapSensitivity)) return "ずれの表示感度が正しくありません";
   if (typeof s.facilityName !== "string" || s.facilityName.length > 100) return "施設名が正しくありません";
+  if (String(s.contactDesk ?? "").length > 50 || String(s.contactPhone ?? "").length > 30) return "窓口の名前か電話番号が長すぎます";
   return null;
 }
 
@@ -97,6 +100,8 @@ export function sanitizeSettings(s: FacilitySettings): FacilitySettings | null {
   const a = s.acceptance ?? ({} as FacilitySettings["acceptance"]);
   return {
     facilityName: String(s.facilityName ?? "").slice(0, 100),
+    contactDesk: String(s.contactDesk ?? "").slice(0, 50),
+    contactPhone: String(s.contactPhone ?? "").slice(0, 30),
     preset: s.preset,
     gapSensitivity: s.gapSensitivity,
     weights: {

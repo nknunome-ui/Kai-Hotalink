@@ -8,6 +8,9 @@ export interface Me {
   role: "admin" | "staff";
   facilityId: string;
   facilityName: string;
+  /** 家族アンケートの案内（紙）に載せる連絡先 */
+  contactDesk: string;
+  contactPhone: string;
   aiEnabled: boolean;
   /** 施設を追加できる運営者か */
   operator: boolean;

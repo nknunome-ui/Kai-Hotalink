@@ -11,6 +11,8 @@ export const GET = handle(async (req: Request) => {
       role: "admin",
       facilityId: "",
       facilityName: "",
+      contactDesk: "",
+      contactPhone: "",
       aiEnabled: aiEnabled(),
       operator: true,
     });
@@ -22,6 +24,8 @@ export const GET = handle(async (req: Request) => {
     role: staff.role,
     facilityId: staff.facilityId,
     facilityName: settings.facilityName,
+    contactDesk: settings.contactDesk,
+    contactPhone: settings.contactPhone,
     aiEnabled: aiEnabled(),
     operator: false,
   });

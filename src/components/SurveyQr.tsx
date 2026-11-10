@@ -3,20 +3,25 @@ import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { Button } from "./ui";
 
-/** アンケート URL の QR コード。面談の場で画面に出し、ご家族のスマホで読み取ってもらう。 */
-export function SurveyQr({ url }: { url: string }) {
+/** URL の QR コードを画像（data URL）にする */
+export function useQrDataUrl(url: string, width = 640): string | null {
   const [src, setSrc] = useState<string | null>(null);
-  const [large, setLarge] = useState(false);
-
   useEffect(() => {
     let alive = true;
-    QRCode.toDataURL(url, { margin: 1, width: 640, errorCorrectionLevel: "M" })
+    QRCode.toDataURL(url, { margin: 1, width, errorCorrectionLevel: "M" })
       .then((d) => alive && setSrc(d))
       .catch(() => alive && setSrc(null));
     return () => {
       alive = false;
     };
-  }, [url]);
+  }, [url, width]);
+  return src;
+}
+
+/** アンケート URL の QR コード。面談の場で画面に出し、ご家族のスマホで読み取ってもらう。 */
+export function SurveyQr({ url }: { url: string }) {
+  const src = useQrDataUrl(url);
+  const [large, setLarge] = useState(false);
 
   useEffect(() => {
     if (!large) return;

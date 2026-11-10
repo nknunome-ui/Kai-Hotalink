@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { JudgmentReport, JudgmentSummary } from "@/components/JudgmentPanel";
 import { ProfileForm } from "@/components/ProfileForm";
+import { SurveySheetButton } from "@/components/SurveySheet";
 import { SurveyQr } from "@/components/SurveyQr";
 import { Button, Check, Field, Notice, Step, StepBadge, Textarea, cx } from "@/components/ui";
 import { useAuth } from "@/lib/client/auth";
@@ -580,6 +581,9 @@ function SurveyStep({
           </div>
           <div className="mt-3 border-t border-brand-soft pt-3">
             <SurveyQr url={url} />
+            <div className="mt-3">
+              <SurveySheetButton url={url} residentName={resident.name} expiresAt={s?.expiresAt ?? null} />
+            </div>
           </div>
         </div>
       )}
