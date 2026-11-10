@@ -4,6 +4,7 @@ import { GRADE_MEANINGS, type Category, type JudgmentResult, type Reason, type R
 
 export const IMPACT_LABEL: Record<ReasonImpact, string> = {
   knockout: "受け入れ範囲外",
+  review: "要検討",
   high: "負担が大きい",
   medium: "負担あり",
   condition: "条件",
@@ -31,11 +32,12 @@ export interface Report {
   actions: ReportAction[];
 }
 
-const IMPACT_ORDER: ReasonImpact[] = ["knockout", "high", "medium", "condition"];
+const IMPACT_ORDER: ReasonImpact[] = ["knockout", "review", "high", "medium", "condition"];
 
 export function buildReport(r: JudgmentResult): Report {
   const problems = [...r.reasons].sort((a, b) => IMPACT_ORDER.indexOf(a.impact) - IMPACT_ORDER.indexOf(b.impact));
   const knockouts = problems.filter((p) => p.impact === "knockout");
+  const reviews = problems.filter((p) => p.impact === "review");
   const heavy = problems.filter((p) => p.impact === "high" || p.impact === "medium");
   const conditions = problems.filter((p) => p.impact === "condition");
 
@@ -44,6 +46,10 @@ export function buildReport(r: JudgmentResult): Report {
     headline = `施設の受け入れ範囲を超えている項目が${knockouts.length}つあります（${knockouts
       .map((k) => shortText(k.text))
       .join("、")}）。`;
+  } else if (reviews.length > 0) {
+    headline = `施設で「検討」にしている項目に当てはまります（${reviews
+      .map((k) => shortText(k.text))
+      .join("、")}）。施設内で受け入れるかどうかを決めてください。`;
   } else if (r.grade === "C" || r.grade === "D") {
     const areas = heavy.map((h) => h.category).filter(unique).map(categoryWord).join("・") || "心身の状態";
     headline = `受け入れ範囲内ですが、${areas}の負担が大きいため、面談での確認が必要です。`;
@@ -59,6 +65,7 @@ export function buildReport(r: JudgmentResult): Report {
 
   const actions: ReportAction[] = [];
   for (const k of knockouts) actions.push({ kind: "resolve", text: k.action ?? FALLBACK_ACTION[k.category], required: true });
+  for (const v of reviews) actions.push({ kind: "resolve", text: v.action ?? FALLBACK_ACTION[v.category], required: true });
   for (const h of heavy) actions.push({ kind: "prepare", text: h.action ?? FALLBACK_ACTION[h.category], required: false });
   for (const c of conditions) {
     actions.push({ kind: "prepare", text: c.action ?? "転倒リスクについてご家族と合意する", required: true });
@@ -88,5 +95,6 @@ function shortText(text: string): string {
     .split("が必要だが")[0]
     .replace(/（[^）]*）が受け入れ上限.*$/, "")
     .replace(/の受け入れ枠がいっぱい.*$/, "の受け入れ枠")
-    .replace(/に対応できない$|への対応が難しい$|の受け入れに対応していない$|が受け入れ範囲を超えている$/, "");
+    .replace(/（施設で「検討」にしている[^）]*）$|は、施設で「検討」にしている範囲$/, "")
+    .replace(/に対応できない$|への対応が難しい$|の受け入れに対応していない$|が受け入れ範囲を超えている$|が受け入れ範囲外$/, "");
 }

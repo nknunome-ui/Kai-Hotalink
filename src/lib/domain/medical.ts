@@ -52,7 +52,8 @@ export const medicalItem = (id: MedicalCareId) => MEDICAL_CARE.find((m) => m.id 
 /** 入居者に必要か: none=不要, day=必要（夜間は不要）, night=夜間も必要 */
 export type MedicalNeed = "none" | "day" | "night";
 /** 施設が受け入れられるか: no=受け入れない, day=日中のみ, both=日中・夜間とも */
-export type MedicalCapability = "no" | "day" | "both";
+/** review: 施設内で検討する（判定は C まで） */
+export type MedicalCapability = "no" | "review" | "day" | "both";
 
 export type MedicalNeeds = Record<MedicalCareId, MedicalNeed>;
 export type MedicalCapabilities = Record<MedicalCareId, MedicalCapability>;
@@ -79,7 +80,7 @@ export function neededItems(needs: MedicalNeeds): { id: MedicalCareId; label: st
 }
 
 const NEEDS: MedicalNeed[] = ["none", "day", "night"];
-const CAPS: MedicalCapability[] = ["no", "day", "both"];
+const CAPS: MedicalCapability[] = ["no", "review", "day", "both"];
 
 /**
  * 入居者の医療的ケアを整える。以前の形（suction・gastrostomy などの項目）で

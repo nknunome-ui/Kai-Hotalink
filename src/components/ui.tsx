@@ -197,7 +197,7 @@ export function Segmented<T extends string | number>({
   /** 読み上げ用のラベル */
   label: string;
   value: T;
-  options: { value: T; label: string; tone?: "yes" | "no" }[];
+  options: { value: T; label: string; tone?: "yes" | "review" | "no" }[];
   onChange: (v: T) => void;
 }) {
   return (
@@ -215,7 +215,8 @@ export function Segmented<T extends string | number>({
               "min-h-9 rounded-full px-4 text-[14px] font-bold transition-colors disabled:cursor-not-allowed",
               !on && "text-ink-soft hover:bg-sheet hover:text-ink",
               on && o.tone === "no" && "bg-ink-soft text-white",
-              on && o.tone !== "no" && "bg-brand-strong text-white",
+              on && o.tone === "review" && "bg-grade-c text-white",
+              on && o.tone !== "no" && o.tone !== "review" && "bg-brand-strong text-white",
             )}
           >
             {o.label}

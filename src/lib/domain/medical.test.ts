@@ -35,6 +35,17 @@ describe("以前の形で保存されたデータの読み替え", () => {
     });
     expect(sanitizeAcceptance({ nightNurse: true }).nurseStaffing).toBe("24h");
   });
+
+  it("施設の設定: 以前の「上限」と true/false を、段階ごとの 受け入れる/検討/受け入れない に読み替える", () => {
+    const a = sanitizeAcceptance({ maxCareLevel: 5, maxDementiaLevel: 2, acceptsBedridden: true, acceptsWandering: false });
+    expect(a.careLevels).toEqual({ 0: "yes", 1: "yes", 2: "yes", 3: "yes", 4: "yes", 5: "yes", 6: "no", 7: "no" });
+    expect(a.dementiaLevels).toEqual({ 0: "yes", 1: "yes", 2: "yes", 3: "no", 4: "no" });
+    expect(a).toMatchObject({ acceptsBedridden: "yes", acceptsWandering: "no", acceptsAggression: "no" });
+    const b = sanitizeAcceptance({ careLevels: { 0: "no", 1: "review", 7: "bogus" }, acceptsAggression: "review", medical: { insulin: "review" } });
+    expect(b.careLevels).toMatchObject({ 0: "no", 1: "review", 2: "yes", 7: "yes" });
+    expect(b.acceptsAggression).toBe("review");
+    expect(b.medical.insulin).toBe("review");
+  });
 });
 
 describe("医療的ケアの受け入れ", () => {

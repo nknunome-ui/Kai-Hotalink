@@ -87,6 +87,11 @@ export function emptyProfile(): ResidentProfile {
   };
 }
 
+/** 受け入れの可否: 受け入れる / 施設内で検討する（判定は C まで） / 受け入れない（判定 D・E） */
+export type Accept = "yes" | "review" | "no";
+
+export const ACCEPT_LABELS: Record<Accept, string> = { yes: "受け入れる", review: "検討", no: "受け入れない" };
+
 /** 施設の受け入れ範囲（足切り条件の元になる） */
 export interface Acceptance {
   /** 看護師の配置体制 */
@@ -95,11 +100,13 @@ export interface Acceptance {
   medical: MedicalCapabilities;
   /** 人数に上限がある医療的ケア（任意） */
   capacity: CareCapacities;
-  maxCareLevel: CareLevel;
-  acceptsBedridden: boolean;
-  maxDementiaLevel: DementiaLevel;
-  acceptsWandering: boolean;
-  acceptsAggression: boolean;
+  /** 要介護度ごとの受け入れ（自立〜要介護5） */
+  careLevels: Record<CareLevel, Accept>;
+  acceptsBedridden: Accept;
+  /** 認知症の程度ごとの受け入れ */
+  dementiaLevels: Record<DementiaLevel, Accept>;
+  acceptsWandering: Accept;
+  acceptsAggression: Accept;
   contactsMinorChanges: boolean; // 小さな変化でも家族に連絡する体制
   routineReport: boolean; // 定期報告（月1回程度）を行っている
 }
@@ -142,7 +149,8 @@ export const GRADE_MEANINGS: Record<Grade, { meaning: string; next: string }> = 
   E: { meaning: "受け入れ不可", next: "他施設の案内など" },
 };
 
-export type ReasonImpact = "knockout" | "high" | "medium" | "condition";
+/** knockout: 受け入れ範囲外（D・E） / review: 施設が「検討」にしている項目（C まで） */
+export type ReasonImpact = "knockout" | "review" | "high" | "medium" | "condition";
 export type Category = "medical" | "physical" | "cognition";
 
 export const CATEGORY_LABELS: Record<Category, string> = {
@@ -225,4 +233,4 @@ export interface Evidence {
 /** 夜間も看護師がいるか（ご家族への説明・同意書の文案に使う） */
 export const hasNightNurse = (acc: Acceptance) => acc.nurseStaffing === "24h";
 /** 看取りに対応しているか */
-export const offersEndOfLife = (acc: Acceptance) => acc.medical.terminalCare !== "no";
+export const offersEndOfLife = (acc: Acceptance) => acc.medical.terminalCare === "both" || acc.medical.terminalCare === "day";

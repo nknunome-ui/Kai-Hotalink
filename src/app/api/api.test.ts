@@ -207,7 +207,7 @@ describe("入居判定の通しの流れ", () => {
     expect(detail.body.judgments).toHaveLength(1);
 
     // 設定の試算: 足切りを厳しくすると判定が変わる
-    const strict = { ...s, acceptance: { ...s.acceptance, maxCareLevel: 4 } };
+    const strict = { ...s, acceptance: { ...s.acceptance, careLevels: { ...s.acceptance.careLevels, 5: "no", 6: "no", 7: "no" } } };
     const sim = await json(await simulate.POST(req("staff-a", { settings: strict })));
     expect(sim.body.rows[0]).toMatchObject({ before: { grade: "B" }, after: { grade: "D" } });
   });

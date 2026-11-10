@@ -235,7 +235,7 @@ function Problem({ reason }: { reason: Reason }) {
       <span
         className={cx(
           "h-fit shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-bold",
-          ko ? "bg-alert text-white" : reason.impact === "condition" ? "bg-sheet text-ink-soft" : "bg-brand-tint text-brand-strong",
+          ko ? "bg-alert text-white" : reason.impact === "review" ? "bg-grade-c text-white" : reason.impact === "condition" ? "bg-sheet text-ink-soft" : "bg-brand-tint text-brand-strong",
         )}
       >
         {IMPACT_LABEL[reason.impact]}

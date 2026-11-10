@@ -1,5 +1,5 @@
 import { normalizeCapabilities, normalizeCapacities } from "./medical";
-import type { Acceptance, FacilitySettings, PresetId, Thresholds, Weights } from "./types";
+import type { Accept, Acceptance, FacilitySettings, PresetId, Thresholds, Weights } from "./types";
 
 export const PRESETS: Record<
   PresetId,
@@ -24,6 +24,30 @@ export const PRESETS: Record<
     thresholds: { a: 20, b: 40, c: 60 },
   },
 };
+
+/** 0〜size の段階のうち、max までを「受け入れる」、それより上を「受け入れない」にする */
+function levelsUpTo(size: number, max: number): Record<number, Accept> {
+  return Object.fromEntries(Array.from({ length: size + 1 }, (_, i) => [i, i <= max ? "yes" : "no"]));
+}
+
+const ACCEPTS: Accept[] = ["yes", "review", "no"];
+/** 受け入れの可否を読む。以前の true/false も読み替える */
+function acceptOf(v: unknown, fallback: Accept): Accept {
+  if (ACCEPTS.includes(v as Accept)) return v as Accept;
+  if (v === true) return "yes";
+  if (v === false) return "no";
+  return fallback;
+}
+
+/** 段階ごとの受け入れを読む。以前の「上限」（maxCareLevel など）だけの設定は、上限までを受け入れるに読み替える */
+function levelsOf(v: unknown, size: number, legacyMax: unknown): Record<number, Accept> {
+  if (v && typeof v === "object") {
+    const m = v as Record<string, unknown>;
+    return Object.fromEntries(Array.from({ length: size + 1 }, (_, i) => [i, acceptOf(m[i], "yes")]));
+  }
+  const max = Math.max(0, Math.min(size, Math.round(Number(legacyMax ?? size))));
+  return levelsUpTo(size, Number.isFinite(max) ? max : size);
+}
 
 export function defaultAcceptance(): Acceptance {
   // よくある有料老人ホーム（看護師は日中のみ）を想定した初期値
@@ -51,11 +75,11 @@ export function defaultAcceptance(): Acceptance {
     nurseStaffing: "day",
     medical,
     capacity: {},
-    maxCareLevel: 7,
-    acceptsBedridden: true,
-    maxDementiaLevel: 3,
-    acceptsWandering: true,
-    acceptsAggression: false,
+    careLevels: levelsUpTo(7, 7) as Acceptance["careLevels"],
+    acceptsBedridden: "yes",
+    dementiaLevels: levelsUpTo(4, 3) as Acceptance["dementiaLevels"],
+    acceptsWandering: "yes",
+    acceptsAggression: "no",
     contactsMinorChanges: false,
     routineReport: true,
   };
@@ -120,18 +144,17 @@ export function sanitizeSettings(s: FacilitySettings): FacilitySettings | null {
  */
 export function sanitizeAcceptance(a: Record<string, unknown>): Acceptance {
   const b = (v: unknown) => v === true;
-  const lvl = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
   const legacy = !a.medical || typeof a.medical !== "object";
   const staffing = (["24h", "day", "none"] as const).find((x) => x === a.nurseStaffing);
   return {
     nurseStaffing: staffing ?? (legacy ? (a.nightNurse === true ? "24h" : "day") : "day"),
     medical: normalizeCapabilities(legacy ? null : a.medical, a),
     capacity: normalizeCapacities(a.capacity),
-    maxCareLevel: lvl(a.maxCareLevel, 7) as Acceptance["maxCareLevel"],
-    acceptsBedridden: b(a.acceptsBedridden),
-    maxDementiaLevel: lvl(a.maxDementiaLevel, 4) as Acceptance["maxDementiaLevel"],
-    acceptsWandering: b(a.acceptsWandering),
-    acceptsAggression: b(a.acceptsAggression),
+    careLevels: levelsOf(a.careLevels, 7, a.maxCareLevel) as Acceptance["careLevels"],
+    acceptsBedridden: acceptOf(a.acceptsBedridden, "no"),
+    dementiaLevels: levelsOf(a.dementiaLevels, 4, a.maxDementiaLevel) as Acceptance["dementiaLevels"],
+    acceptsWandering: acceptOf(a.acceptsWandering, "no"),
+    acceptsAggression: acceptOf(a.acceptsAggression, "no"),
     contactsMinorChanges: b(a.contactsMinorChanges),
     routineReport: b(a.routineReport),
   };
