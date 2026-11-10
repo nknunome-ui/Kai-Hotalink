@@ -87,3 +87,17 @@ body {
     list-style: none;
   }
 }
+
+/* 家族アンケートの案内（A4）を印刷するときは、案内だけを印刷する */
+@page survey-sheet {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  body:has(> .survey-print) > :not(.survey-print) {
+    display: none !important;
+  }
+  .survey-print {
+    page: survey-sheet;
+  }
+}

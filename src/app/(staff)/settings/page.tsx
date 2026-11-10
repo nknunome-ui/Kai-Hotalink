@@ -278,10 +278,18 @@ export default function SettingsPage() {
       </section>
 
       <fieldset disabled={!isAdmin} className="space-y-6">
-        <Card title="施設の名前">
+        <Card title="施設の名前と連絡先">
           <Field label="施設名" hint="家族アンケートの画面や、同意書の文案に表示されます。">
             <Input value={s.facilityName} maxLength={100} onChange={(e) => setAll({ facilityName: e.target.value })} />
           </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="ご家族向けの窓口" hint="アンケートの案内（印刷用）に載ります">
+              <Input value={s.contactDesk} maxLength={50} placeholder="例：入居相談窓口" onChange={(e) => setAll({ contactDesk: e.target.value })} />
+            </Field>
+            <Field label="窓口の電話番号">
+              <Input type="tel" value={s.contactPhone} maxLength={30} placeholder="例：03-1234-5678" onChange={(e) => setAll({ contactPhone: e.target.value })} />
+            </Field>
+          </div>
         </Card>
 
         <Card title="看護師と医療的ケア" note="受け入れられない医療的ケアが必要な方は、判定が D（2つ以上なら E）になります。">

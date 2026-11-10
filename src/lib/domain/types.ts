@@ -122,6 +122,9 @@ export interface Thresholds {
 
 export interface FacilitySettings {
   facilityName: string;
+  /** 家族アンケートの案内（紙）に載せる窓口の名前と電話番号 */
+  contactDesk: string;
+  contactPhone: string;
   acceptance: Acceptance;
   preset: PresetId;
   weights: Weights;
