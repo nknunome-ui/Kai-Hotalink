@@ -39,11 +39,28 @@ describe("足切り", () => {
     expect(judge({ residentName: "", profile: p, settings: settings(), answers: null }).grade).toBe("E");
   });
 
-  it("要介護度の上限超え", () => {
+  it("要介護度の範囲外（上も下も）", () => {
     const s = settings();
-    s.acceptance.maxCareLevel = 5;
-    const p = profile((p) => (p.careLevel = 7));
-    expect(knockouts(p, s.acceptance)[0].text).toContain("要介護5");
+    s.acceptance.careLevels[7] = "no";
+    s.acceptance.careLevels[0] = "no"; // 自立の方は受け入れない
+    expect(knockouts(profile((p) => (p.careLevel = 7)), s.acceptance)[0].text).toContain("要介護5");
+    expect(knockouts(profile((p) => (p.careLevel = 0)), s.acceptance)[0]).toMatchObject({ impact: "knockout", text: "要介護度（自立）が受け入れ範囲外" });
+    expect(knockouts(profile((p) => (p.careLevel = 1)), s.acceptance)).toHaveLength(0);
+  });
+
+  it("「検討」にした項目に当てはまると、点数がよくても C。受け入れ範囲外があれば D のまま", () => {
+    const s = settings();
+    s.acceptance.careLevels[6] = "review";
+    s.acceptance.medical.insulin = "review";
+    const p = profile((p) => (p.careLevel = 6));
+    const r = judge({ residentName: "", profile: p, settings: s, answers: null });
+    expect(r.grade).toBe("C");
+    expect(r.reasons[0]).toMatchObject({ impact: "review", text: "要介護度（要介護4）は、施設で「検討」にしている範囲" });
+
+    p.medical.insulin = "day";
+    expect(knockouts(p, s.acceptance).filter((x) => x.impact === "review")).toHaveLength(2);
+    p.medical.tppv = "day";
+    expect(judge({ residentName: "", profile: p, settings: s, answers: null }).grade).toBe("D");
   });
 });
 

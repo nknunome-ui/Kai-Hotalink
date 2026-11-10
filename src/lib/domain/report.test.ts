@@ -60,4 +60,25 @@ describe("判定レポート", () => {
     expect(report.headline).toContain("（徘徊）");
     expect(report.actions[0].text).toBe("認知症の症状と対応方法を面談で詳しく確認する");
   });
+
+  it("「検討」の項目に当てはまれば、施設内で検討するよう結論とやることに出す", () => {
+    const s = settings();
+    s.acceptance.medical.insulin = "review";
+    s.acceptance.acceptsWandering = "review";
+    const r = judge({
+      residentName: "",
+      profile: profile((p) => {
+        p.medical.insulin = "day";
+        p.cognition.wandering = true;
+      }),
+      settings: s,
+      answers: null,
+    });
+    expect(r.grade).toBe("C");
+    const report = buildReport(r);
+    expect(report.headline).toBe("施設で「検討」にしている項目に当てはまります（インスリン注射が必要、徘徊がある）。施設内で受け入れるかどうかを決めてください。");
+    expect(report.problems[0].impact).toBe("review");
+    expect(report.actions[0]).toMatchObject({ kind: "resolve", required: true });
+    expect(report.actions[0].text).toContain("施設内で検討し、受け入れるかどうかを決める");
+  });
 });

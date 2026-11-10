@@ -17,6 +17,7 @@ import type { SettingsHistoryEntry, SettingsRecord } from "@/lib/domain/records"
 import {
   CARE_LEVEL_LABELS,
   DEMENTIA_LABELS,
+  type Accept,
   type Acceptance,
   type CareLevel,
   type DementiaLevel,
@@ -57,18 +58,52 @@ function strictnessOf(t: Thresholds): Strictness | "custom" {
   return hit ?? "custom";
 }
 
-/** 受け入れていない項目の一覧（設定画面の上に出す） */
-function refusedItems(acc: Acceptance): string[] {
+type Summary = Record<Accept, string[]>;
+
+/** 続いている段階をまとめて「要支援1〜要介護3」のように書く */
+function ranges<K extends number>(levels: Record<K, Accept>, labels: Record<K, string>, want: Accept): string[] {
+  const keys = (Object.keys(levels).map(Number) as K[]).sort((a, b) => a - b);
   const out: string[] = [];
-  for (const m of MEDICAL_CARE) {
-    if (acc.medical[m.id] === "no") out.push(`${m.label}が必要な方`);
-    else if (acc.medical[m.id] === "day") out.push(`夜間の${m.label}が必要な方`);
+  let from: K | null = null;
+  keys.forEach((k, i) => {
+    const hit = levels[k] === want;
+    if (hit && from === null) from = k;
+    const nextHit = i + 1 < keys.length && levels[keys[i + 1]] === want;
+    if (hit && !nextHit && from !== null) {
+      out.push(from === k ? labels[k] : `${labels[from]}〜${labels[k]}`);
+      from = null;
+    }
+  });
+  return out;
+}
+
+const DEMENTIA_SHORT = Object.fromEntries(
+  Object.entries(DEMENTIA_LABELS).map(([k, l]) => [k, l.split("（")[0]]),
+) as Record<DementiaLevel, string>;
+
+/** 受け入れる・検討・受け入れない方の一覧（設定画面の上に出す） */
+function summarize(acc: Acceptance): Summary {
+  const out: Summary = { yes: [], review: [], no: [] };
+  for (const a of ["yes", "review", "no"] as Accept[]) {
+    for (const r of ranges(acc.careLevels, CARE_LEVEL_LABELS, a)) out[a].push(`${r}の方`);
+    for (const r of ranges(acc.dementiaLevels, DEMENTIA_SHORT, a)) {
+      out[a].push(r === "なし" ? "認知症のない方" : r.startsWith("なし〜") ? `認知症が「${r.slice(3)}」までの方` : `認知症が「${r}」の方`);
+    }
   }
-  if (acc.maxCareLevel < 7) out.push(`${CARE_LEVEL_LABELS[(acc.maxCareLevel + 1) as CareLevel]}以上の方`);
-  if (acc.maxDementiaLevel < 4) out.push(`認知症が「${DEMENTIA_LABELS[(acc.maxDementiaLevel + 1) as DementiaLevel].split("（")[0]}」以上の方`);
-  if (!acc.acceptsBedridden) out.push("寝たきりの方");
-  if (!acc.acceptsWandering) out.push("徘徊のある方");
-  if (!acc.acceptsAggression) out.push("暴言・暴力のある方");
+  const yesMedical = MEDICAL_CARE.filter((m) => acc.medical[m.id] === "both" || acc.medical[m.id] === "day");
+  if (yesMedical.length > 0) out.yes.push(`医療的ケアが必要な方（${MEDICAL_CARE.length}項目中${yesMedical.length}項目）`);
+  for (const m of MEDICAL_CARE) {
+    const c = acc.medical[m.id];
+    if (c === "no") out.no.push(`${m.label}が必要な方`);
+    else if (c === "review") out.review.push(`${m.label}が必要な方`);
+    else if (c === "day") out.no.push(`夜間の${m.label}が必要な方`);
+  }
+  const states: [Accept, string][] = [
+    [acc.acceptsBedridden, "寝たきりの方"],
+    [acc.acceptsWandering, "徘徊のある方"],
+    [acc.acceptsAggression, "暴言・暴力のある方"],
+  ];
+  for (const [a, l] of states) out[a].push(l);
   return out;
 }
 
@@ -94,17 +129,42 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   );
 }
 
-function YesNo({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+const ACCEPT_OPTIONS: { value: Accept; label: string; tone?: "review" | "no" }[] = [
+  { value: "yes", label: "受け入れる" },
+  { value: "review", label: "検討", tone: "review" },
+  { value: "no", label: "受け入れない", tone: "no" },
+];
+
+/** 受け入れる / 検討 / 受け入れない */
+function Tri({ label, value, onChange }: { label: string; value: Accept; onChange: (v: Accept) => void }) {
+  return <Segmented<Accept> label={label} value={value} onChange={onChange} options={ACCEPT_OPTIONS} />;
+}
+
+/** 要介護度・認知症の段階ごとに、受け入れる / 検討 / 受け入れない を選ぶ */
+function LevelTable<K extends number>({
+  title,
+  labels,
+  value,
+  onChange,
+}: {
+  title: string;
+  labels: Record<K, string>;
+  value: Record<K, Accept>;
+  onChange: (v: Record<K, Accept>) => void;
+}) {
+  const keys = (Object.keys(labels).map(Number) as K[]).sort((a, b) => a - b);
   return (
-    <Segmented<"yes" | "no">
-      label={label}
-      value={value ? "yes" : "no"}
-      onChange={(v) => onChange(v === "yes")}
-      options={[
-        { value: "yes", label: "受け入れる" },
-        { value: "no", label: "受け入れない", tone: "no" },
-      ]}
-    />
+    <div className="border-b border-line py-3 last:border-0">
+      <p className="mb-2 text-[15px] font-bold">{title}</p>
+      <div className="space-y-1.5">
+        {keys.map((k) => (
+          <div key={k} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-2xl bg-paper py-1 pr-1 pl-4">
+            <span className="text-[14px] font-semibold">{labels[k]}</span>
+            <Tri label={`${title}：${labels[k]}`} value={value[k]} onChange={(v) => onChange({ ...value, [k]: v })} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -242,14 +302,14 @@ export default function SettingsPage() {
 
   const changed = sim?.filter((r) => r.before.grade !== r.after.grade) ?? [];
   const dirty = JSON.stringify(s) !== JSON.stringify(rec.settings);
-  const refused = refusedItems(acc);
+  const summary = summarize(acc);
   const strictness = strictnessOf(s.thresholds);
 
   return (
     <div className={cx("max-w-3xl", dirty && isAdmin && "pb-28")}>
       <h1 className="mb-1 text-[24px] font-bold">受け入れ設定</h1>
       <p className="mb-6 text-[14px] text-ink-soft">
-        施設で受け入れられる方の範囲を決めます。ここで「受け入れない」にした項目に当てはまる方は、判定が D（2つ以上なら E）になります。
+        施設で受け入れられる方の範囲を決めます。「受け入れない」にした項目に当てはまる方は判定が D（2つ以上なら E）、「検討」にした項目に当てはまる方は C（施設内で検討）になります。
         <br />
         <span className="text-mute">
           現在の設定：v{rec.version}
@@ -262,19 +322,32 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <section className="mb-6 rounded-3xl border-2 border-brand-soft bg-brand-tint p-5">
-        <h2 className="text-[15px] font-bold">この施設で受け入れていない方</h2>
-        {refused.length === 0 ? (
-          <p className="mt-1 text-[14px] text-ink-soft">受け入れの制限はありません。</p>
-        ) : (
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {refused.map((x) => (
-              <li key={x} className="rounded-full bg-sheet px-3 py-1 text-[13px] font-bold text-ink-soft">
-                {x}
-              </li>
-            ))}
-          </ul>
-        )}
+      <section className="mb-6 grid gap-3 sm:grid-cols-3">
+        {(
+          [
+            ["yes", "受け入れる方", "border-grade-a/30 bg-sheet", "text-grade-a"],
+            ["review", "検討する方（判定は C）", "border-grade-c/30 bg-sheet", "text-grade-c"],
+            ["no", "受け入れていない方", "border-line bg-paper", "text-ink-soft"],
+          ] as const
+        ).map(([k, title, box, head]) => (
+          <div key={k} className={cx("rounded-3xl border-2 p-4", box)}>
+            <h2 className={cx("text-[15px] font-bold", head)}>{title}</h2>
+            {summary[k].length === 0 ? (
+              <p className="mt-1 text-[13px] text-mute">{k === "no" ? "受け入れの制限はありません" : "なし"}</p>
+            ) : (
+              <ul className="mt-2 space-y-1 text-[13px] leading-snug">
+                {summary[k].map((x) => (
+                  <li key={x} className="flex gap-1.5">
+                    <span aria-hidden className={head}>
+                      {k === "yes" ? "◯" : k === "review" ? "△" : "×"}
+                    </span>
+                    {x}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
       </section>
 
       <fieldset disabled={!isAdmin} className="space-y-6">
@@ -313,13 +386,15 @@ export default function SettingsPage() {
           <div className="mt-2 space-y-2">
             {MEDICAL_GROUPS.map((g) => {
               const items = MEDICAL_CARE.filter((m) => m.group === g.id);
-              const accepted = items.filter((m) => acc.medical[m.id] !== "no").length;
+              const accepted = items.filter((m) => acc.medical[m.id] === "both" || acc.medical[m.id] === "day").length;
+              const reviewing = items.filter((m) => acc.medical[m.id] === "review").length;
               return (
                 <details key={g.id} className="group rounded-2xl bg-paper">
                   <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
                     <span className="text-[15px] font-bold">{g.label}</span>
                     <span className="text-[13px] text-ink-soft">
                       {items.length}項目中 <b className="text-brand-strong">{accepted}</b>項目を受け入れ
+                      {reviewing > 0 && <>・{reviewing}項目を検討</>}
                       <span className="ml-2 inline-block transition-transform group-open:rotate-180" aria-hidden>
                         ▾
                       </span>
@@ -337,10 +412,12 @@ export default function SettingsPage() {
                               ? [
                                   { value: "both", label: "日中・夜間" },
                                   { value: "day", label: "日中のみ" },
+                                  { value: "review", label: "検討", tone: "review" },
                                   { value: "no", label: "受け入れない", tone: "no" },
                                 ]
                               : [
                                   { value: "both", label: "受け入れる" },
+                                  { value: "review", label: "検討", tone: "review" },
                                   { value: "no", label: "受け入れない", tone: "no" },
                                 ]
                           }
@@ -361,43 +438,27 @@ export default function SettingsPage() {
           <CapacityEditor acc={acc} onChange={(capacity) => setAcc({ capacity })} />
         </Card>
 
-        <Card title="介護度・認知症" note="どの程度の方まで受け入れるかを選んでください。">
-          <Row label="要介護度">
-            <Select
-              aria-label="受け入れる要介護度の上限"
-              className="w-auto min-w-44"
-              value={acc.maxCareLevel}
-              onChange={(e) => setAcc({ maxCareLevel: Number(e.target.value) as CareLevel })}
-            >
-              {Object.entries(CARE_LEVEL_LABELS).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l}まで
-                </option>
-              ))}
-            </Select>
-          </Row>
-          <Row label="認知症の程度">
-            <Select
-              aria-label="受け入れる認知症の程度の上限"
-              className="w-auto min-w-44"
-              value={acc.maxDementiaLevel}
-              onChange={(e) => setAcc({ maxDementiaLevel: Number(e.target.value) as DementiaLevel })}
-            >
-              {Object.entries(DEMENTIA_LABELS).map(([k, l]) => (
-                <option key={k} value={k}>
-                  {l.split("（")[0]}まで
-                </option>
-              ))}
-            </Select>
-          </Row>
+        <Card title="介護度・認知症" note="段階ごとに、受け入れるか・検討するか・受け入れないかを選んでください。">
+          <LevelTable<CareLevel>
+            title="要介護度"
+            labels={CARE_LEVEL_LABELS}
+            value={acc.careLevels}
+            onChange={(careLevels) => setAcc({ careLevels })}
+          />
+          <LevelTable<DementiaLevel>
+            title="認知症の程度"
+            labels={DEMENTIA_SHORT}
+            value={acc.dementiaLevels}
+            onChange={(dementiaLevels) => setAcc({ dementiaLevels })}
+          />
           <Row label="寝たきりの方">
-            <YesNo label="寝たきりの方" value={acc.acceptsBedridden} onChange={(v) => setAcc({ acceptsBedridden: v })} />
+            <Tri label="寝たきりの方" value={acc.acceptsBedridden} onChange={(v) => setAcc({ acceptsBedridden: v })} />
           </Row>
           <Row label="徘徊のある方">
-            <YesNo label="徘徊のある方" value={acc.acceptsWandering} onChange={(v) => setAcc({ acceptsWandering: v })} />
+            <Tri label="徘徊のある方" value={acc.acceptsWandering} onChange={(v) => setAcc({ acceptsWandering: v })} />
           </Row>
           <Row label="暴言・暴力のある方">
-            <YesNo label="暴言・暴力のある方" value={acc.acceptsAggression} onChange={(v) => setAcc({ acceptsAggression: v })} />
+            <Tri label="暴言・暴力のある方" value={acc.acceptsAggression} onChange={(v) => setAcc({ acceptsAggression: v })} />
           </Row>
         </Card>
 

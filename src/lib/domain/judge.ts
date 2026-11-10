@@ -10,6 +10,7 @@ import {
   CARE_LEVEL_LABELS,
   DEMENTIA_LABELS,
   hasNightNurse,
+  type Accept,
   MOBILITY_LABELS,
   offersEndOfLife,
   type Acceptance,
@@ -37,9 +38,20 @@ const cap10 = (n: number) => Math.min(10, n);
 
 // ---------- 足切り ----------
 
+/**
+ * 施設の受け入れ範囲と照らし合わせる。
+ * 「受け入れない」に当てはまれば knockout（判定 D・E）、「検討」に当てはまれば review（判定は C まで）。
+ */
 export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
   const out: Reason[] = [];
   const add = (category: Category, text: string, action: string) => out.push({ category, impact: "knockout", text, action });
+  const review = (category: Category, text: string, what: string) =>
+    out.push({ category, impact: "review", text, action: `${what}を施設内で検討し、受け入れるかどうかを決める` });
+  /** 受け入れない → knockout、検討 → review */
+  const check = (a: Accept, category: Category, ko: [string, string], rv: [string, string]) => {
+    if (a === "no") add(category, ...ko);
+    else if (a === "review") review(category, ...rv);
+  };
 
   for (const item of MEDICAL_CARE) {
     const need = p.medical[item.id];
@@ -51,6 +63,8 @@ export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
         `${item.label}に対応できない`,
         `${item.label}に対応できる体制（看護職員・協力医療機関・訪問看護）を用意できるか検討する`,
       );
+    } else if (cap === "review") {
+      review("medical", `${item.label}が必要（施設で「検討」にしている医療的ケア）`, `${item.label}に対応できる体制（看護職員・協力医療機関・訪問看護）`);
     } else if (need === "night" && cap === "day") {
       add(
         "medical",
@@ -68,35 +82,42 @@ export function knockouts(p: ResidentProfile, acc: Acceptance): Reason[] {
       }
     }
   }
-  if (p.careLevel > acc.maxCareLevel) {
-    add(
+  const care = CARE_LEVEL_LABELS[p.careLevel];
+  check(
+    acc.careLevels[p.careLevel] ?? "yes",
+    "physical",
+    [`要介護度（${care}）が受け入れ範囲外`, "必要な介助量を面談で確認し、職員体制で対応できるか、受け入れ範囲を見直せるかを検討する"],
+    [`要介護度（${care}）は、施設で「検討」にしている範囲`, "必要な介助量と職員体制"],
+  );
+  if (p.physical.mobility === "bedridden") {
+    check(
+      acc.acceptsBedridden,
       "physical",
-      `要介護度（${CARE_LEVEL_LABELS[p.careLevel]}）が受け入れ上限（${CARE_LEVEL_LABELS[acc.maxCareLevel]}）を超えている`,
-      "必要な介助量を面談で確認し、職員体制で対応できるか、受け入れ上限を見直せるかを検討する",
+      ["寝たきりの方の受け入れに対応していない", "体位変換・入浴などの介助体制と設備で対応できるか検討する"],
+      ["寝たきり（施設で「検討」にしている状態）", "体位変換・入浴などの介助体制と設備"],
     );
   }
-  if (p.physical.mobility === "bedridden" && !acc.acceptsBedridden) {
-    add(
-      "physical",
-      "寝たきりの方の受け入れに対応していない",
-      "体位変換・入浴などの介助体制と設備で対応できるか検討する",
-    );
-  }
-  if (p.cognition.dementiaLevel > acc.maxDementiaLevel) {
-    add(
+  const dem = DEMENTIA_LABELS[p.cognition.dementiaLevel].split("（")[0];
+  check(
+    acc.dementiaLevels[p.cognition.dementiaLevel] ?? "yes",
+    "cognition",
+    ["認知症の程度が受け入れ範囲を超えている", "面談で症状と必要な対応を詳しく確認し、認知症ケアの体制で対応できるか検討する"],
+    [`認知症の程度（${dem}）は、施設で「検討」にしている範囲`, "認知症の症状と、認知症ケアの体制"],
+  );
+  if (p.cognition.wandering) {
+    check(
+      acc.acceptsWandering,
       "cognition",
-      "認知症の程度が受け入れ範囲を超えている",
-      "面談で症状と必要な対応を詳しく確認し、認知症ケアの体制で対応できるか検討する",
+      ["徘徊への対応が難しい", "見守りや離設を防ぐ体制で対応できるか検討する"],
+      ["徘徊がある（施設で「検討」にしている状態）", "見守りや離設を防ぐ体制"],
     );
   }
-  if (p.cognition.wandering && !acc.acceptsWandering) {
-    add("cognition", "徘徊への対応が難しい", "見守りや離設を防ぐ体制で対応できるか検討する");
-  }
-  if (p.cognition.aggression && !acc.acceptsAggression) {
-    add(
+  if (p.cognition.aggression) {
+    check(
+      acc.acceptsAggression,
       "cognition",
-      "暴言・暴力への対応が難しい",
-      "主治医と相談して対応方法を確認し、職員の安全も含めて受け入れられるか判断する",
+      ["暴言・暴力への対応が難しい", "主治医と相談して対応方法を確認し、職員の安全も含めて受け入れられるか判断する"],
+      ["暴言・暴力がある（施設で「検討」にしている状態）", "主治医と相談した対応方法と、職員の安全"],
     );
   }
   return out;
@@ -573,16 +594,20 @@ export function judge({ residentName, profile: raw, settings, answers, interview
   const acc = settings.acceptance;
   const profile = withInterview(raw, interview);
   const unclean = Boolean(interview?.bpsd.includes("uncleanBehavior"));
-  const ko = knockouts(profile, acc);
+  const checked = knockouts(profile, acc);
+  const ko = checked.filter((r) => r.impact === "knockout");
+  const toReview = checked.filter((r) => r.impact === "review");
   const scores = categoryScores(profile, unclean);
   const score = riskScore(scores, settings);
   const fall = hasFallRisk(profile);
 
-  const reasons: Reason[] = [...ko, ...scoreReasons(profile, scores, unclean)];
+  const reasons: Reason[] = [...checked, ...scoreReasons(profile, scores, unclean)];
   let grade: Grade;
   if (ko.length >= 2) grade = "E";
   else if (ko.length === 1) grade = "D";
   else grade = gradeFromScore(score, settings);
+  // 「検討」の項目に当てはまれば、点数がよくても C（要検討）にする
+  if (toReview.length > 0 && (grade === "A" || grade === "B")) grade = "C";
 
   if (fall) {
     reasons.push({
